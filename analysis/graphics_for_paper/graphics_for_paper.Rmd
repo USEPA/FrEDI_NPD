@@ -1,0 +1,1883 @@
+---
+title: "Figures for FrEDI NPD Paper"
+author: "Industrial Economics, Inc, updated by CH and EM"
+use:    "Contains figures for FrEDI NPD paper"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  rmarkdown::html_document:
+    theme: spacelab
+    toc: true
+    toc_float: true
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  cache=F,
+  warning = FALSE, 
+  message = FALSE
+  )
+```
+
+#Set-Up
+
+### Load Packages
+
+Load packages
+
+```{r load_packages, echo = FALSE, include = FALSE}
+require(tidyverse)
+require(arrow)
+require(xts)
+require(dygraphs)
+require(maps)
+require(viridis)
+require(rgeos)
+require(maptools)
+require(tidytext)
+require(scales)
+require(patchwork)
+require(paletteer)
+```
+
+### Paths
+
+Set paths to files
+
+```{r set_paths, include = FALSE}
+###### Set code paths ######
+### Path to main folder
+npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
+
+#npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
+
+###### Set output paths ######
+#perturb_gas    <- "co2"
+#perturb_year   <- 2020
+## Constrained/transformed path
+NPDPath <-  npdPath %>% file.path("output","npd_damage_transformation")
+damage_prefix  <- "damages" 
+damagePath     <- npdPath %>% file.path("output", "damages", "rffsp"); 
+
+damage_ftype   <- "parquet"
+### Files to iterate over
+c_iteration  <- damagePath %>% file.path("damages") %>% list.files(pattern = "\\_constrained.parquet") %>%
+  (function(x){sub("\\_constrained.parquet", "", x)}) %>%
+  (function(x){sub("damages_", "", x)}) %>%
+  as.numeric %>% sort; 
+  c_iteration %>% length
+
+
+
+###### For data outputs ######
+stats_outPath    <- damagePath %>% file.path("output_stats")
+
+### Temperature input file path
+inputPath        <- npdPath %>% file.path("data", "input_files")
+
+### Current analysis folder path
+analysisPath     <- npdPath %>% file.path("analysis", "graphics_for_paper")
+
+### Current path for where aggregate fredi dataframes are stored ###
+frediDataPath  <- npdPath %>% file.path("output", "damages","fredi_analysis")
+
+
+```
+
+### Common Values
+
+
+#### Conversion Factors
+
+<!-- From Corinne's email -->
+<!-- ```{r, eval = F} -->
+<!-- mutate(diff =  perturbed - baseline) %>% -->
+<!--   # divide by pulse size for every year after I take the difference -->
+<!--   # pulse is 1 Mt CO2 -->
+<!--   # $/ton of CO2 -->
+<!--   # mutate(diff = diff / 1000000000) %>% # Gt to ton of CO2 -->
+<!--   mutate(diff = diff / 10^9) %>% # Gt to ton of CO2 -->
+<!--   mutate(diff = diff * (12/44)) -->
+<!-- ``` -->
+
+<!-- * "Perturbed" runs are baseline runs that include a one-time pulse of 1 gigaton of carbon dioxide in 2020 -->
+
+
+#### Sector Groups and Sectors
+
+<!-- No sector groups at the moment -->
+
+Sector groups from GIVE. Sector group to sector crosswalk (relating FrEDI sectors and GIVE sector groups). The FrEDI sectors in the table below were selected based on EPA guidance on which sectors are most directly comparable.
+
+#### Variables for Grouping and Summarizing
+
+Variables for grouping and summarizing: Information about variables for summarizing by sector group.
+
+#### Global Variables
+
+Select years
+
+```{r c_eraYears, include = FALSE, echo = FALSE}
+c_eraYears  <- c(2050,2070,2090)
+
+colors_full = c("#EA7580FF", "#F6A1A5FF", "#F8CD9CFF", "#86b98e", 
+                "#4d8055", "#1BB6AFFF", "#088BBEFF","#172869FF")
+#secondary_light, error-base, accent-warm-light, green-light, (green-dark), aqua-light, blue-dark
+colors_6 = c("#f2938c", "#d54309", "#ffbc78", "#4d8055", "#97d4ea",
+             "#1a4480")
+colors_7 = c("#f2938c", "#d54309", "#ffbc78", "#86b98e","#4d8055",
+             "#97d4ea","#1a4480")
+colors_blues = c("#d9e8f6","#aacdec","#73b3e7","#005ea2","#0050d8",
+                 "#1a4480","#162e51")
+
+
+#define sector categories
+labor_cat <- c("Labor")
+ag_cat <- c("CIL Agriculture")
+elect_cat <- c("Electricity Demand and Supply", 
+               "Electricity Transmission and Distribution")
+cil_health_cat <- c("Air Quality","Valley Fever",
+                    "CIL Extreme Temperature","Wildfire",
+                    "Southwest Dust", "CIL Crime")
+ats_health_cat <- c("Air Quality","Valley Fever",
+                    "ATS Extreme Temperature","Wildfire",
+                    "Southwest Dust","CIL Crime")
+infrastructure_cat <- c("Rail","Roads","Urban Drainage","Coastal Properties", 
+                        "High Tide Flooding and Traffic", "Inland Flooding",
+                        "Wind Damage")
+eco_cat <- c("Marine Fisheries", "Winter Recreation", "Water Quality")
+
+#Dollar conversion from 2015 to 2020 USD
+pricelevel_2015_to_2020 = 113.784/104.691
+
+```
+
+
+# Load the Data
+
+```{r load_analysis_data, echo=FALSE}
+
+#these files are created by the 5_fredi_analysis.R script
+
+# All years, all trials, national annual impacts
+df_fraw_nat1 <- read_parquet(frediDataPath %>%
+                            file.path("baseline_impacts_nat_thru2050_constrained.parquet"))
+df_fraw_nat2 <- read_parquet(frediDataPath %>%
+                            file.path("baseline_impacts_nat_2050-2100_constrained.parquet"))
+#bind years together
+df_fraw_allnat <- rbind(df_fraw_nat1, df_fraw_nat2)
+remove(df_fraw_nat1); remove(df_fraw_nat2)
+
+# All years, national annual impact stats
+df_fstat1  <- read_parquet(frediDataPath %>%
+                          file.path("baseline_impacts_nat_thru2050_stats_constrained.parquet"))
+df_fstat2  <- read_parquet(frediDataPath %>%
+                          file.path("baseline_impacts_nat_2050-2100_stats_constrained.parquet"))
+df_fstat3  <- read_parquet(frediDataPath %>%
+                          file.path("baseline_impacts_nat_2100-2150_stats_constrained.parquet"))
+df_fstat4  <- read_parquet(frediDataPath %>%
+                          file.path("baseline_impacts_nat_2200-2250_stats_constrained.parquet"))
+df_fstat5  <- read_parquet(frediDataPath %>%
+                          file.path("baseline_impacts_nat_2250-2300_stats_constrained.parquet"))
+df_fstat <- rbind(df_fstat1, df_fstat2, df_fstat3, df_fstat4,df_fstat5)
+#df_fstat <- rbind(df_fstat1, df_fstat2)
+remove(df_fstat1); remove(df_fstat2); remove(df_fstat3); remove(df_fstat4); remove(df_fstat5)
+
+# 2090, all trials, regional annual impacts
+df_fraw_2090reg <- read_parquet(frediDataPath %>%
+                            file.path("impacts_reg_2090.parquet"))
+
+# 2090, regional annual impact stats
+df_fstat_2090reg  <- read_parquet(frediDataPath %>% 
+                            file.path("impacts_reg_2090_stats.parquet"))
+
+# 2090, all trials, annual impacts for sectors with adaptation
+df_fraw_2090adapt <- read_parquet(frediDataPath %>%
+                            file.path("impacts_adapt_2090.parquet"))
+
+# 2090, annual impact stats for sectors with adaptation
+df_fstat_2090adapt <- read_parquet(frediDataPath %>%
+                            file.path("impacts_adapt_2090_stats.parquet"))
+
+# 2090, all trials, sectors with physical impacts
+df_fraw_phys2090nat <- read_parquet(frediDataPath %>%
+                            file.path("phys_impacts_nat_2090.parquet"))
+
+# 2090, physical impact stats for sectors with physical impacts
+df_fstat_2090phys<- read_parquet(frediDataPath %>% 
+                            file.path("phys_impacts_nat_2090_stats.parquet"))
+
+# SCGHG full data stream (too big to push to repo)
+#scghg_data <- read_parquet(file.path(scghgPath,
+#             "co2_full_streams_2020_national_default_adaptation.parquet"))
+
+# load pre-processed files instead
+damage_share_data <- read_parquet(file.path(frediDataPath,
+              "Damage_GDP_Share_2100.parquet"))
+scghg_data <- read_parquet(file.path(frediDataPath,
+              "scghg_by_trial.parquet"))
+
+```
+
+
+### Total Sector Summary
+
+Sectoral Annual Damages in Billions 2020$
+```{r table_allsectors_2090,echo=FALSE}
+
+#Baseline Results
+#used for main text #s and Table A2
+
+print(df_fstat %>%
+  filter(year ==2090) %>%
+    mutate(mean = mean/1e9 * pricelevel_2015_to_2020) %>% #in billions
+    mutate(X025 = X025/1e9 * pricelevel_2015_to_2020) %>%
+    mutate(X50 = X50/1e9 * pricelevel_2015_to_2020) %>%
+    mutate(X975 = X975/1e9 * pricelevel_2015_to_2020) %>%
+    select(sector,X025,X50,X975,mean,year) %>%
+    group_by(mean)%>%
+    arrange(.by_group = TRUE) %>% mutate(across(c('X025','X50', 'X975'), ~ signif(.,2))))
+  
+
+#total summary
+print (signif(df_fstat %>% 
+        filter(year == 2090) %>%
+        mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
+        summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
+
+```
+
+# Tables
+
+## Table 1
+```{r table1,echo=FALSE,include=TRUE}
+
+#Table 1
+table1 <- df_fraw_allnat %>%
+  filter(year==2090) %>%
+  mutate(category = case_when(
+    sector %in% labor_cat ~ "Labor (1)",
+    sector %in% ag_cat ~ "Agriculture (1)",
+    sector %in% elect_cat ~ "Electricity (2)",
+    sector %in% ats_health_cat ~ "Health (6)",
+    sector %in% infrastructure_cat ~ "Infrastructure (7)",
+    sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
+    TRUE ~ NA_character_)) %>% 
+  filter(category != "NA") %>% 
+  mutate(value=annual_impacts/1e9*pricelevel_2015_to_2020) %>% #billions 
+  group_by_at(.vars = c('category','trial','year')) %>%
+  summarize_at(c("value"), sum, na.rm=T) %>%#sum across categories per trial
+  ungroup %>%
+  group_by_at(.vars=c('category','year'))%>% #stats across trials
+  summarize(X025=quantile(value,probs=0.025), 
+            X50=quantile(value, probs=0.50),
+            X975=quantile(value,probs=0.975),
+            mean=mean(value)) %>% 
+  ungroup %>%
+  select('category','X025','X975','mean','year') 
+
+table1 <- table1 %>% mutate(across(c('X025', 'X975', 'mean'), ~ signif(.,2)))
+
+print(table1)
+
+#total summary
+print(signif(table1 %>%
+        summarize_at(.vars = c("mean","X025","X975"),sum,na.rm=T), 2))
+
+```
+
+## Table 2 - physical impacts
+
+```{r table2,echo=FALSE}
+
+#Table 2
+print(df_fstat_2090phys %>%
+        select('sector','physicalmeasure','X025','X975','mean',
+                'year','damageType')) %>%  #not in dollars so no conversions
+  mutate(across(c('X025', 'X975', 'mean'), ~ signif(.,2)))
+
+```
+
+## Appendix Table - Adapation
+
+``` {r adapt_table,eval=TRUE, include=FALSE,echo=FALSE}
+
+df_adapt_sectors <- df_fstat_2090adapt %>%
+  mutate(X025 = X025 * pricelevel_2015_to_2020/1e9) %>% #2020 billions
+  mutate(X975 = X975 * pricelevel_2015_to_2020/1e9) %>% #2020 billions
+  mutate(mean = mean * pricelevel_2015_to_2020/1e9) %>%  #2020 billions
+  select(sector,variant,X025,X975,mean,year,damageType)
+  
+  print(df_adapt_sectors %>% 
+           mutate(across(c('X025', 'X975', 'mean'), ~ signif(.,2))))
+
+```
+
+
+# Figures
+
+## Figure 2. Annual Impacts in Select Years
+
+### Option A
+
+```{r stackedBar_bySector,echo=FALSE}
+##Annual Impacts for Baseline##
+
+#filter relevant data for three years of interest and assign category to each sector
+
+plots_stackedBar_bySector <- df_fstat %>%
+  filter(year %in% c_eraYears) %>% mutate(year = as.factor(year)) %>%
+  mutate(category = case_when(
+    sector %in% labor_cat ~ "Labor (1)",
+    sector %in% ag_cat ~ "Agriculture (1)",
+    sector %in% elect_cat ~ "Electricity (2)",
+    sector %in% ats_health_cat ~ "Health (6)",
+    sector %in% infrastructure_cat ~ "Infrastructure (7)",
+    sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
+    TRUE ~ NA_character_)) %>% 
+  filter(category != "NA") %>% 
+  #filter(damageType == "Baseline") %>% 
+  mutate(value = mean / 1e12 * pricelevel_2015_to_2020) #%>% trillions
+
+#TO REORDER FROM LARGEST TO SMALLEST CATEGORY
+cat_i <- plots_stackedBar_bySector %>% 
+  group_by_at(.vars=c("category")) %>% 
+  summarize_at(.vars=c("value"),sum,na.rm=T) %>%
+  ungroup %>% arrange_at(.vars=c("value", "category"))
+plots_stackedBar_bySector <- plots_stackedBar_bySector %>% 
+  mutate(category = category %>% factor(levels = (cat_i$category))) %>%
+  arrange_at(.vars=c("category"))
+  #or mutate(category = category %>% factor(levels = rev(cat_i$category))) to plot smallest to largest
+
+
+
+df_1 <- plots_stackedBar_bySector %>%
+      ggplot() +
+      geom_bar(aes(fill=category,y=value,x=year), 
+               position="stack", 
+               stat="identity",
+               alpha = 0.7) +
+      scale_y_continuous("Damages (Trillions)")+#,limits=c(0,3)) +
+      scale_x_discrete("Year") + 
+      #scale_fill_paletteer_d("LaCroixColoR::Pamplemousse",6,direction = 1)+
+      scale_fill_manual(values=colors_6)+
+      theme_minimal() +
+      theme(axis.text = element_text(size=11), 
+            axis.title = element_text(size =14),
+            axis.title.y = element_text(margin = 
+                                        margin(t = 0, r = 10, b = 0, l = 0)),
+            axis.title.x = element_text(margin = 
+                                        margin(t = 5, r = 0, b = 0, l = 0)),
+            legend.text=element_text(size=10),
+            legend.title=element_text(size=10, face="bold"),
+            plot.title = element_text(size = 16, face = "bold"),
+            plot.title.position = "plot")+
+      labs(title="Annual U.S. Climate-Driven Damages", 
+           subtitle="Mean Damages by Year and Category (Trillions $)",
+           fill = "Sector Categories \n(number of sectors in category)")#,
+           #caption = 'Figure 2. Mean climate-driven damages for the years 
+           #2050, 2070, and 2090, colored by sector category' )+
+
+df_1
+ggsave(plot = df_1, filename = 'Figure2a.tiff',width = 5,height = 4)
+
+print(df_1$data %>% filter(year == 2090) %>%
+        #group_by_at("damageType") %>%
+        summarize_at(.vars = c("value"),sum,na.rm=T) %>% 
+         mutate(across(c('value'), ~ signif(.,2))))
+print(df_1$data %>% filter(year == 2090) %>%
+        group_by_at(c("sector")) %>%
+        summarize_at(.vars = c("value"),sum,na.rm=T) %>% 
+        mutate(across(c('value'), ~ signif(.,2))))
+```
+
+### Option B - with error bars
+```{r OptionB, eval = FALSE,echo=FALSE}
+##Baseline Case ##
+
+ #same plot as option A, with error bars overlayed
+ df_plotsum <- plots_stackedBar_bySector %>%
+   group_by_at(c("year")) %>%
+   summarize_at(.vars=c("mean","X025",'X975','X50'),sum,na.rm=T) %>%
+   mutate(ymin = X025 / 1e12 *pricelevel_2015_to_2020) %>%
+   mutate(ymax = X975 / 1e12 *pricelevel_2015_to_2020) %>%
+   ungroup
+ 
+df_1 <- plots_stackedBar_bySector %>%
+       ggplot() +
+       geom_bar(aes(fill=category,y=value,x=year),
+                position="stack", 
+                stat="identity", 
+                alpha = 0.7) +
+       scale_y_continuous("Damages (Trillions)",limits=c(0,12.5)) +
+       scale_x_discrete("Year") +
+       theme_minimal() +
+       scale_fill_manual(values=colors_6)+
+       theme(axis.text = element_text(size=11), 
+             axis.title = element_text(size =14),
+             axis.title.y = element_text(margin = 
+                                        margin(t = 0, r = 10, b = 0, l = 0)),
+             axis.title.x = element_text(margin = 
+                                        margin(t = 5, r = 0, b = 0, l = 0)),
+             legend.text=element_text(size=10),
+             legend.title=element_text(size=10, face="bold"),
+             plot.title = element_text(size = 16, face = "bold"),
+             plot.title.position = "plot")+
+       labs(title="Annual U.S. Climate-Driven Damages",
+            subtitle="Mean Damages by Year and Cateogry (Trillions $)",
+            fill = "Sector Categories \n(number of sectors in category)")+#,
+            #caption = "Figure 2.")+
+       geom_errorbar(data = df_plotsum, 
+                     aes(x=year,ymin = ymin, ymax=ymax),
+                     color = 'dark gray',
+                     width = 0.25,
+                     size=1)
+ df_1
+ ggsave(plot = df_1, filename = 'fig02.tiff',width = 5,height = 4)
+ 
+ 
+#show in billions of 2020 USD
+print(plots_stackedBar_bySector %>%
+        filter(year==2090) %>%
+        mutate(X025 = X025 / 1e9 *pricelevel_2015_to_2020) %>%
+        mutate(X975 = X975 / 1e9 *pricelevel_2015_to_2020) %>%
+        mutate(value = value *1e3) %>%
+        group_by_at(c("category")) %>%
+        summarize_at(.vars = c("value",'X025','X975'),sum,na.rm=T) %>% 
+        mutate(across(c('value', 'X025','X975'), ~ signif(.,2))))
+         
+```
+
+
+## Figure 3. Total Damages (statistics) by sector in 2090 
+
+** Need to stitch 3 figures together in PowerPoint **
+
+```{r basic_bw_plots,fig.width=7,fig.height = 8,eval=TRUE,echo=FALSE}
+
+# format the data into categories and re-order
+
+plot_list <- list()
+
+plots_basicBoxWhisker <- df_fraw_allnat %>%
+  filter(year ==2090) %>%
+  mutate(category = case_when(
+    sector %in% labor_cat ~ "Labor (1)",
+    sector %in% ag_cat ~ "Agriculture (1)",
+    sector %in% elect_cat ~ "Electricity (2)",
+    sector %in% ats_health_cat ~ "Health (6)",
+    sector %in% infrastructure_cat ~ "Infrastructure (7)",
+    sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
+    TRUE ~ NA_character_)) %>% 
+    mutate(value = annual_impacts / 1e9 * pricelevel_2015_to_2020) %>% #billions
+  filter(category != "NA") 
+
+#find order of sectors and categories, largest to smallest, then sort
+sectors_i <- plots_basicBoxWhisker %>% 
+        group_by_at(.vars=c("sector")) %>% 
+        summarize_at(.vars=c("value"),mean,na.rm=T) %>%
+        ungroup %>% arrange_at(.vars=c("value", "sector")) %>%
+        arrange(desc(row_number())) #reverse order sectors
+
+cat_i <- plots_basicBoxWhisker %>% 
+        group_by_at(.vars=c("category")) %>% 
+        summarize_at(.vars=c("value"),sum,na.rm=T) %>%
+        ungroup %>% arrange_at(.vars=c("value", "category"))
+
+plots_basicBoxWhisker <- plots_basicBoxWhisker %>% 
+        mutate(sector = sector %>% 
+                        factor(levels = sectors_i$sector)) %>%
+        arrange_at(.vars=c("sector"))
+
+plots_basicBoxWhisker <- plots_basicBoxWhisker %>% 
+        mutate(category = category %>% 
+                          factor(levels = rev(cat_i$category))) %>%
+        arrange_at(.vars=c("category"))
+
+
+# stats <- plots_basicBoxWhisker %>%
+#   group_by(sector) %>%
+#   mutate(X025=quantile(value,probs=0.025),
+#               X25=quantile(value,probs=0.25), 
+#               X50=quantile(value, probs=0.50),
+#               X75=quantile(value,probs=0.75),
+#               X975=quantile(value,probs=0.975),
+#               mean=mean(value)) %>% ungroup
+
+```
+
+```{r boxplot_vals_function, echo=FALSE, include=FALSE}
+#define function that calculates box plot values
+BoxMedianQuant <- function(x) {
+  v <- c(quantile(x, 0.025), quantile(x, 0.25), median(x), 
+         quantile(x, 0.75), quantile(x, 0.975))
+  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
+  v
+}
+
+outliers <- function(x) {
+  if (length(x) > 5) {
+  subset(x, x < quantile(x, 0.025) | quantile(x, 0.975) < x)
+  } else {
+    return(NA)
+  }
+}
+```
+
+Three-panel box and whisker plot
+```{r, Option 1,fig.width=9,fig.height = 5,echo=FALSE}
+  
+units <- 'Billions'
+  p <- plots_basicBoxWhisker %>%
+    #filter for ATS only
+    filter(sector %in% c('ATS Extreme Temperature') ) %>%
+    mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+    ggplot(aes(x=reorder(sector,value,mean,na.rm=TRUE),
+               y=value,
+               fill=category))+
+    coord_flip()+
+    stat_summary(fun.data=BoxMedianQuant, 
+                 geom="boxplot",
+                 width=0.8,
+                 alpha=0.6)+
+    #stat_summary(fun.y = outliers, 
+    #             geom = "point",
+    #             color = 'dark gray',
+    #             size=1)+
+    stat_summary(fun=mean,geom = "point",
+                 shape=23,
+                 color='black')+
+    scale_y_continuous(sec.axis=dup_axis())+
+    scale_fill_manual(values=rev(colors_6))+  
+    labs(x='',
+         y=paste0('Damages (',units,')'),
+         title= 'U.S. Annual Climate-Driven Damages in 2090',
+         subtitle='by sector, colored by sector category')+
+    theme_minimal()+
+    theme(legend.position = "none",
+          legend.key=element_blank(), #c(0.65,0.4)
+          legend.background=element_blank(),
+          axis.text = element_text(size=12), 
+          axis.title = element_text(size =12),
+          axis.title.x = element_text(margin = 
+                                        margin(t = 5, r = 0, b = 0, l = 0)),
+          plot.margin = margin(l=5))+ 
+    guides(fill=guide_legend(title=''))+
+    knitr::opts_chunk$set(fig.width=6,fig.height = 5)
+  plot_list[[1]] = p
+  p
+  
+  p1 <- plots_basicBoxWhisker %>%
+    #filter for next top sectors (selected by hand)
+    filter(sector %in% c('Air Quality', 'High Tide Flooding and Traffic',
+                          'Labor','Wildfire') ) %>%
+    mutate(sector = sapply(sector, function(x) gsub(" and"," &",x))) %>%
+    ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
+               y=value,
+               fill=category))+
+    coord_flip()+
+    stat_summary(fun.data=BoxMedianQuant, 
+                 geom="boxplot",
+                 width=0.8,
+                 alpha=0.6)+
+    #stat_summary(fun.y = outliers, 
+    #             geom = "point",
+    #             color = 'dark gray',
+    #             size=1)+
+    stat_summary(fun=mean,geom = "point",
+                 shape=23,
+                 color='black')+
+    scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,1125))+
+    scale_fill_manual(values=rev(colors_6))+
+    labs(x='',
+         y=paste0('Damages (',units,')'),
+         title= 'Climate-Driven Damages in 2090',
+         subtitle='by sector, colored by sector category')+
+    theme_minimal()+
+    theme(legend.position = "none",
+          legend.key=element_blank(), #c(0.65,0.4)
+          legend.background=element_blank(),
+          axis.text = element_text(size=12), 
+          axis.title = element_text(size =12),
+          axis.title.x = element_text(margin = 
+                                        margin(t = 5, r = 0, b = 0, l = 0)),
+          plot.margin = margin(l=5))+ 
+    guides(fill=guide_legend(title=''))+
+    knitr::opts_chunk$set(fig.width=6,fig.height = 5)
+  plot_list[[1]] = p1
+  p1
+  
+  p2 <- plots_basicBoxWhisker %>%
+    #select remaining sectors
+    filter(!sector %in% c('ATS Extreme Temperature','Air Quality', 
+                          'High Tide Flooding and Traffic',
+                          'Labor','Wildfire') ) %>%
+    #rename sectors
+    mutate(sector = sapply(sector, 
+                           function(x) gsub("Distribution","Dist.",x))) %>%
+    mutate(sector = sapply(sector, 
+                           function(x) gsub("Transmission","Trans.",x))) %>%
+    mutate(sector = sapply(sector, function(x) gsub(" and"," &",x))) %>%
+    ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
+               y=value,
+               fill=category))+
+    coord_flip()+
+    stat_summary(fun.data=BoxMedianQuant, 
+                 geom="boxplot",
+                 width = 0.8,
+                 alpha=0.6)+
+    #stat_summary(fun.y = outliers, 
+    #             geom = "point",
+    #             color = 'dark gray',
+    #             size=1)+
+    stat_summary(fun=mean,geom = "point",
+                 shape=23,
+                 color='black')+
+    scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,100))+
+    labs(x='', 
+         y=paste0('Damages (',units,')'),
+         title= 'U.S. Annual Climate-Driven Damages in 2090',
+         subtitle='by sector, colored by sector category')+
+    scale_fill_manual(values=rev(colors_6[-4]))+
+    theme_minimal()+
+    theme(legend.position = 'none',
+          #legend.key=element_blank(), #c(0.65,0.4)
+          legend.background=element_blank(),
+          axis.text = element_text(size=12), 
+          axis.title = element_text(size =12),
+          axis.text.y = element_text(hjust=1),
+          axis.title.x = element_text(margin = 
+                                      margin(t = 5, r = 0, b = 0, l = 0)),
+          plot.margin = margin(l=5))+ 
+    guides(fill=guide_legend(title='Sector Category'))
+  p2
+  
+  
+  #Option B is commented out
+    ggsave(plot = p, filename = 'Figure3a(2).tiff',width = 6.5,height = 1.65, bg = 'white')
+    ggsave(plot = p1, filename = 'Figure3b(2).tiff',width = 7,height = 2.25,bg = 'white')
+    #ggsave(plot = p2, filename = 'Figure3lgnd.tiff',width = 6.8,height = 3.5)
+    ggsave(plot = p2, filename = 'Figure3c(2).tiff',width = 7,height = 4,bg = 'white')
+    
+    
+```
+
+
+
+## Figure 4. Total Damages Map
+
+### Per capita
+```{r Map_PerCapita,fig.height=5,fig.width=9,echo=FALSE}
+#Plot average of regional impacts/regional population for each trial (e.g. per capita)
+
+
+#summarize across impactType for each sector and region
+df_sector_region_sum <- df_fraw_2090reg %>%
+    mutate(annual_impacts = annual_impacts * pricelevel_2015_to_2020) %>%
+  # calculate total impacts per capita for each region and trail
+    mutate(impacts_percap = annual_impacts / reg_pop) %>%
+    ungroup %>%
+#  # calculate the mean of per capita impacts across all trials (by region)
+    group_by_at(c("region","sector")) %>%
+    summarize(
+              X025=quantile(impacts_percap,probs=0.025), 
+              X975=quantile(impacts_percap, probs=0.975),
+              impacts_percap = mean(impacts_percap, na.rm=T)) %>%
+    ungroup
+    
+#sum across all sectors for each region
+df_region_sum <- df_sector_region_sum %>%
+    group_by_at(c("region")) %>%
+    summarize(impacts_percap = sum(impacts_percap, na.rm=T),
+              X025=sum(X025, na.rm=T), 
+              X975=sum(X975, na.rm=T)) %>%
+    ungroup
+  
+
+#Create dataframe by state (to be filled with impacts below)
+MainStates <- map_data('state')
+#Readin NCA regions
+NCA_regions <- read.csv(paste0(analysisPath,"/NCA_Regions.csv"))
+#Create dataframe with NCA region outlines
+state_map <- map("state", fill=T, plot =FALSE)
+state_map_match <- data.frame(name = state_map$names) %>%
+  separate(name, c("State","subregion"), 
+           sep= ":", remove=FALSE) %>%
+  left_join(NCA_regions %>% select(State,Region))
+rownames(state_map_match) <- state_map_match$name
+  
+#convert map to spatial polygon, then join with mapping table
+state_map <- map2SpatialPolygons(state_map, IDs=state_map$names)
+state_map <- SpatialPolygonsDataFrame(state_map, state_map_match)
+
+#remove non valid points in the state map
+invisible(gIsValid(state_map))
+state_map <- gBuffer(state_map, byid=TRUE, width = 0)
+invisible(gIsValid(state_map))
+
+#dissolve map by state? and fortify to dataframe
+area_map <- unionSpatialPolygons(state_map, IDs = state_map$Region)
+area_map <- fortify(area_map)
+area_map$group <- gsub(".1", "", x= area_map$group, fixed = T)
+
+df <- df_region_sum
+state_impacts <- data.frame(
+    region = unique(MainStates$region),
+    impacts = 0)
+  
+#Northwest
+state_impacts$impacts[state_impacts$region %in% 
+                        c('washington','idaho', 'oregon')] <- 
+    df$impacts_percap[df$region == 'Northwest']
+
+#Southwest
+state_impacts$impacts[state_impacts$region %in% 
+                          c('california','nevada',
+                            'utah','colorado','arizona','new mexico')] <-
+    df$impacts_percap[df$region == 'Southwest']
+
+#Northern Great Plains
+state_impacts$impacts[state_impacts$region %in% 
+                          c('montana','wyoming', 'north dakota',
+                            'south dakota','nebraska')] <-
+    df$impacts_percap[df$region == 'Northern Plains']
+
+#Southern Great Plains
+state_impacts$impacts[state_impacts$region %in% 
+                          c('kansas','oklahoma', 'texas')] <-
+    df$impacts_percap[df$region == 'Southern Plains']
+
+#Midwest
+state_impacts$impacts[state_impacts$region %in% 
+                          c('minnesota','iowa',
+                            'missouri','wisconsin','indiana',
+                            'illinois','michigan','ohio')] <-
+    df$impacts_percap[df$region == 'Midwest']
+
+#Southeast
+state_impacts$impacts[state_impacts$region %in% 
+                          c('arkansas','mississippi',
+                            'louisiana','alabama','georgia',
+                            'florida','south carolina',
+                            'tennessee','kentucky',
+                            'north carolina','virginia')] <-
+    df$impacts_percap[df$region == 'Southeast']
+
+#Northeast
+state_impacts$impacts[state_impacts$region %in% 
+                          c('west virginia','district of columbia',
+                            'delaware','maryland',
+                            'pennsylvania','new jersey','connecticut',
+                            'rhode island',
+                            'new york','massachusetts','vermont',
+                            'new hampshire','maine')] <-
+    df$impacts_percap[df$region == 'Northeast']
+
+# Use the dplyr package to merge the MainStates and annual_impacts dataframes
+MergedStates <- inner_join(MainStates, state_impacts, by = "region")
+
+#Plot Map w/region borders
+p <- ggplot(data = MergedStates, 
+              mapping=aes(x=long, y=lat, group=group,fill=factor(impacts)))+
+    geom_polygon(color="white",
+                 size=0.2) + 
+    geom_polygon(data=area_map, 
+                 aes(x=long,y=lat,group=group), 
+                 fill=NA, size=1,color="black") + 
+    #discrete color scale
+    scale_fill_brewer(palette = 'Greys', 
+                    guide = guide_legend(reverse=TRUE),
+                    labels=function(x) sprintf("$%1.0f", as.double(x)))+
+    theme_minimal()+  
+    theme(legend.key.size = unit(1, 'cm'),
+          legend.title = element_text(size=12),
+          legend.text = element_text(size=10),
+          legend.position = "right",
+          legend.box.margin = margin(t = 1, l = 1),
+          axis.ticks.x=element_blank(),
+          axis.ticks.y=element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          panel.background = 
+            element_rect(fill = "white",
+                         colour = "white",
+                         size = 0.5,
+                         linetype = "solid"),
+          panel.grid.major = 
+            element_line(size = 0.5, 
+                         linetype = 'solid',
+                         colour = "white"),
+          panel.grid.minor = 
+            element_line(size = 0.5, 
+                         linetype = 'solid',
+                         colour = "white"))+
+          labs(title= 
+               paste0('2090 Regional Climate-Driven Damages Per Capita'),
+               fill= "Damages per Capita",
+               #subtitle='Mean Damages per capita damages in each NCA region',
+               x='',
+               y='')
+  
+  ggsave(plot = p, filename = 'fig04.tiff',width = 9,height = 5)
+  p
+  
+  print(df_region_sum %>% 
+          mutate(across(c('impacts_percap','X025', 'X975'), ~ signif(.,2))))
+  print(df_sector_region_sum %>% 
+            mutate(across(c('impacts_percap','X025', 'X975'), ~ signif(.,2))))
+  
+```
+
+### Per capita Regional sector donut charts
+```{r percap_category_piecharts, echo = FALSE, include=TRUE}
+  #make regional donut charts, by category (per capita)
+  #already in 2020 dollars
+
+#controls opacity of colors
+darkop <- 'B3'
+
+
+#sector category and category color
+plots_pie_region <- df_sector_region_sum %>% #already in 2020 $
+  mutate(category = case_when(
+    sector %in% labor_cat ~ "Labor (1)",
+    sector %in% ag_cat ~ "Agriculture (1)",
+    sector %in% elect_cat ~ "Electricity (2)",
+    sector %in% ats_health_cat ~ "Health (6)",
+    sector %in% infrastructure_cat ~ "Infrastructure (7)",
+    sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
+    TRUE ~ NA_character_)) %>% 
+  mutate(color_f = case_when(
+    sector %in% labor_cat ~ paste0(colors_6[4],darkop),
+    sector %in% ag_cat ~ paste0(colors_6[2],darkop),
+    sector %in% elect_cat ~ paste0(colors_6[3],darkop),
+    sector %in% ats_health_cat ~ paste0(colors_6[6],darkop),
+    sector %in% infrastructure_cat ~ paste0(colors_6[5],darkop),
+    sector %in% eco_cat ~ paste0(colors_6[1],darkop),
+    TRUE ~ NA_character_)) %>% 
+  filter(category != "NA") %>% 
+  filter(impacts_percap != 'NaN')%>%
+  arrange_at(.vars=c("impacts_percap", "sector"))
+
+regions = unique(plots_pie_region$region)
+plist <-list()
+count=0
+
+
+#donut plots (loop through each region)
+for (iregion in regions){
+  count = count+1
+  
+  #format donut chart dataframe
+  p_temp <- plots_pie_region %>%
+    filter(region == iregion) %>%
+    #sum across sectors
+    group_by_at(.vars=c("sector","color_f")) %>% 
+    summarize_at(.vars=c("impacts_percap"),sum,na.rm=T) %>%
+    ungroup %>% 
+    #reorder based on per capita impacts
+    arrange_at(.vars=c("impacts_percap")) %>%
+    filter(impacts_percap >=0) %>%
+    arrange(desc(impacts_percap))%>%
+    #set non-top 4 sectors to 'remaining' group
+    mutate(RowNum = row_number(),
+           sector = ifelse(RowNum <= 4, sector, 'Remaining')) %>%
+    group_by(sector) %>%
+    #sum across all new groups (top four sectors and remaining)
+    summarise(impacts_percap = sum(impacts_percap)) %>%
+    arrange(desc(impacts_percap))%>%
+    mutate(sector = as.factor(sector)) %>%
+    #set colors of each sector (need to define all that are in top 4)
+    mutate(color_f = case_when(
+    sector %in% c('ATS Extreme Temperature') ~ paste0(colors_7[7],darkop),
+    sector %in% c('Air Quality') ~ paste0(colors_7[6],darkop),
+    sector %in% c('Labor') ~ paste0(colors_7[5],darkop),
+    sector %in% c('CIL Agriculture') ~ paste0(colors_7[4],darkop),
+    sector %in% c('Rail') ~ paste0(colors_7[3],darkop),
+    sector %in% c('High Tide Flooding and Traffic') ~
+      paste0(colors_7[2],darkop),
+    sector %in% c('Roads') ~ paste0(colors_7[1],darkop),
+    sector %in% c('Wildfire') ~ paste0('#c05600',darkop),
+    sector %in% c('Wind Damage') ~ paste0('#446443',darkop),
+    sector %in% c('Southwest Dust') ~ paste0('#936f38',darkop),
+    sector %in% c('Remaining') ~ paste0('#D3D3D3',darkop)))
+  
+  p_temp$fraction <- p_temp$impacts_percap/sum(p_temp$impacts_percap)
+  # Compute the cumulative percentages (top of each rectangle)
+  p_temp$ymax <- cumsum(p_temp$fraction)
+  # Compute the bottom of each rectangle
+  p_temp$ymin <- c(0, head(p_temp$ymax, n=-1))
+  # Compute label position
+  p_temp$labelPosition <- (p_temp$ymax + p_temp$ymin) / 2
+  # Compute a good label
+  p_temp$label <- paste0(format(round(100*p_temp$fraction, 0), 
+                                nsmall = 0),'%')
+  label2 = paste0(format(round(100*sum(p_temp$impacts_percap)/
+                              sum(plots_pie_region$impacts_percap),1),
+                         nsmall=1),'%')
+  
+  #plot donut chart data
+  p <- ggplot(p_temp, aes(ymax = ymax, ymin = ymin,xmax = 4, xmin = 3, 
+                          fill = reorder(sector,(impacts_percap)))) + 
+    geom_rect() +
+    geom_text(x=4.25, 
+              aes(y=labelPosition,label=''),
+              size=5) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values =rev(p_temp$color_f), 
+                    #switch the guide lines if no legend needed
+                    #guide = guide_legend(reverse=TRUE))+#
+                    guide = "none")+
+    theme_void()+
+    xlim(c(2,4))+
+    labs(fill = "Top 4 Sectors",title = paste(iregion,label2))
+    
+  #p
+  plist[[count]] <-p
+  ggsave(p,filename = paste0('Figure4_',iregion,'.tiff'),width = 5,height = 5)
+
+}
+
+plist
+
+```
+
+## Figure 5 Damages v GDP
+
+```{r Figure5, fig.height=6, fig.width=9, echo=FALSE}
+
+#this needs to run on DMAP
+
+#data <- scghg_data %>%
+#        mutate(adaptation = 'Default Adaptation')
+
+
+data <- damage_share_data %>%
+  rename(value = "damages.baseline.pct") %>%
+  group_by(year) %>%
+  summarise(mean = mean(value),
+              med  = median(value),
+              #min  = min(value),
+              max  = max(value),
+              q01  = quantile(value,.01),
+              #q025 = quantile(value,.025),
+              q05  = quantile(value,.05),
+              #q25  = quantile(value,.25),
+              #q75  = quantile(value,.75),
+              q95  = quantile(value,.95),
+              #q975 = quantile(value,.975),
+              q99  = quantile(value,.99), 
+              .groups = 'keep')
+
+
+## plot
+data %>% 
+  ggplot() +
+  geom_line(aes(x=year, y=mean), 
+            size=1) +
+  geom_line(aes(x=year, y=med), 
+            linetype='dashed', 
+            size=1) +
+  geom_ribbon(aes(x=year, ymin=q01, ymax=q99), 
+              alpha=0.2, 
+              color=NA) +
+  geom_ribbon(aes(x=year, ymin=q05, ymax=q95), 
+              alpha=0.1, 
+              color=NA) +
+  scale_x_continuous(breaks = c(2020,2050,2070,2100), 
+                     limits = c(2020,2100),
+                     labels = c(2020, 2050, 2070, 2100)) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8),
+                     labels = scales::percent) +
+  annotation_custom(
+    grob = grid::rectGrob(gp = grid::gpar(col = NA, fill = "white")),
+    xmin = 2100
+    ) +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values  = colors) +
+  scale_linetype_manual(values=c('dashed', 'solid', 'dotted')) +
+  labs(x        = 'Year', 
+       y        = expression(paste('Total Damage Share (% of US GDP)')),
+       caption  = '',
+       color    = '',
+       fill     = '',
+       alpha    = '',
+       linetype = '') +
+  theme_minimal() +
+  theme(legend.position  = 'bottom',
+        legend.title     = element_text(size=16, color='grey20'),
+        legend.text      = element_text(size=16, color='grey20'),
+        legend.key.size  = unit(0.75, 'cm'),
+        legend.margin    = margin(0, 0, 0, 0),
+        axis.title       = element_text(size=16),
+        axis.text        = element_text(size=14),
+        axis.line.x      = element_line(color = "black"),
+        axis.ticks.x     = element_line(color = "black", size=1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color='grey70', linetype="dotted"),
+        panel.grid.minor = element_blank(),
+        plot.caption     = element_text(size=11, hjust=0.5),
+        plot.title       = element_text(size=14, hjust=0.5),
+        text             = element_text(family="sans-serif", color='grey20'))  +
+  guides(color = guide_legend(reverse=T),
+         fill  = guide_legend(reverse=T),
+         alpha = guide_legend(reverse=T),
+         linetype = guide_legend(reverse=T))
+
+## export 
+ggsave(filename = 'Figure5.tiff', width = 9, height = 6)
+
+df <- data %>% 
+  filter(year %in% c(2090, 2100, 2300))
+print(df %>%  
+        mutate(across(c('mean', 'med', 'max', 'q01', 'q05', 'q95', 'q99'), ~ signif(.,2))))
+```
+
+## Figure 6 - Discounting Method Box Plot
+
+```{r Figure6, fig.height=5, fig.width=7, echo=FALSE}
+
+## full streams
+#data <- scghg_data %>%
+#        mutate(adaptation = 'Default Adaptation')
+
+data <- scghg_data
+
+##########################
+######### by discount rate
+##########################
+
+## plot data specific to this plot
+plot.data = data %>% 
+  filter(discount.rate %in% 
+           c('1.5% Ramsey', '2.0% Ramsey', '2.5% Ramsey', "3.0% Ramsey"), #2.0% CDR #Figure A6
+           #c('1.5% Ramsey', '2.0% Ramsey', '2.5% Ramsey', "3.0% Ramsey"), #Figure 6
+         emissions.year==2020) %>% 
+  distinct() %>% 
+  arrange(trial) %>% 
+  ungroup()
+
+## select grouping
+group = c('emissions.year', 'gas', 'discount.rate')
+
+## labels
+plot.data %<>% group_by_at(group) %>%
+  mutate(scghg.mean  = mean(scghg),
+         scghg.lower = quantile(scghg,.025),
+         scghg.upper = quantile(scghg,.975),
+         scghg.75 = quantile(scghg,.75),
+         label.position = mean(scghg)) %>%
+  ungroup()
+
+
+## ordering of central rate for alpha transparency
+plot.data$discount.rate <- factor(plot.data$discount.rate, 
+                                  levels=c("1.5% Ramsey", "2.0% Ramsey", 
+                                           "2.5% Ramsey", "3.0% Ramsey"))
+
+## ordering of damage functions
+#plot.data$adaptation <- factor(plot.data$adaptation, 
+#                               levels=c('Default Adaptation'))
+
+## all three just the boxplot
+## function to help with boxplots
+quantiles_95 <- function(x) {
+  r <- quantile(x, probs=c(.025, 0.25, 0.5, 0.75, 0.975))
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
+
+## function for labels
+means = plot.data %>% 
+  group_by(discount.rate) %>% 
+  summarise(means=mean(scghg)) %>% 
+  mutate(across(c('means'), ~ signif(.,2))) 
+
+p <- plot.data %>%
+  ggplot() +
+  stat_summary(aes(x=scghg, y=discount.rate, color=discount.rate,
+                   fill=discount.rate),
+               alpha    = 0.5,
+               geom     = "boxplot",
+               fun.data = quantiles_95, 
+               width    = 0.5, 
+               #position = position_dodge(.9),
+               show.legend=T) + 
+  stat_summary(aes(x=scghg, y=discount.rate, color=discount.rate),
+               alpha = 1,
+               fun   = mean, 
+               geom  = "point", 
+               shape = 8, 
+               size  = 4, 
+               #position = position_dodge(.9),
+               show.legend=F) +
+  geom_text(data=means, 
+            aes(x=means, y=discount.rate, group=discount.rate, 
+                label=paste0('$', round(means, 2)), vjust=-1.5),
+            position = position_dodge(1.3),
+            color    = 'grey20',
+            size     = 4,
+            family   = "sans-serif") +
+  labs(
+    # title = 'XXX')),
+    x     = expression(paste('Dollars per ton of ', CO[2])),
+    y     = '',
+    color = 'Discount Rate',
+    fill  = 'Discount Rate',
+    alpha = 'Discount Rate') +
+  scale_x_continuous(
+  #  limits = c(0,110),
+  #  # breaks = seq(0,5,1), 
+    labels = scales::dollar)+#,
+  #  expand = expansion(mult=c(0,0))) +
+  scale_y_discrete(expand = expansion(mult=c(0.0,0))) +
+  scale_color_manual(values = colors_6) +
+  scale_fill_manual(values  = colors_6) +
+  coord_cartesian(xlim = c(0,quantile(plot.data$scghg,0.99))) + #0.985
+  theme_minimal() +
+  theme(legend.position = c(0.75, 0.65),
+        legend.title    = element_text(size=12),
+        legend.text     = element_text(size=12),
+        legend.key.size = unit(0.75, 'cm'),
+        legend.margin   = margin(-10, 0, 0, 0),
+        axis.title.x    = element_text(size=14,hjust=0.5,vjust=-0.5),
+        axis.text       = element_text(size=12),
+        #axis.text.x = element_text(scales::dollar),
+        axis.text.y     = element_blank(),
+        plot.caption    = element_text(size=11, hjust=0.5),
+        #text           = element_text(family="sans-serif", color='grey20')) +
+        text            = element_text( color='grey20')) +
+  guides(color = guide_legend(reverse = T),
+         fill  = guide_legend(reverse = T, 
+                              override.aes = list(linetype = 0, alpha=0.7)),
+         alpha = guide_legend(reverse = T))
+
+p
+
+ggsave(p, filename = 'f06.tiff', width=7, height=3.5, bg = 'white')
+
+```
+
+## Appendix Figure 1.
+RFF temperature, population, and gdp - created elsewhere
+Process_RFF_Temp.Rmd
+
+## Appendix Figure 2.  
+
+Annual Damages Timeseries - all sectors (national total)
+
+Plot annual impacts by sector (National Totals)
+
+currently ordered by decreasing mean in 2090 - 
+could change to decreasing mean in 2300 or another variable
+
+```{r annual_bySector,eval=TRUE,fig.height=12,fig.width=9,echo=FALSE}
+ plots_annual_bySector <- df_fstat %>%
+   #if plotting 2100 version
+   #filter(year <= 2100) %>%
+   #if plotting 2300 version
+   filter(year <= 2100 & year > 2020) %>%
+   mutate_at(.vars = c('X025','mean','X975'), 
+             function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
+   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
+
+#order sectors by decreasing mean in 2090  
+sectors_i <- plots_annual_bySector %>% 
+         filter(year ==2100) %>%
+         group_by_at(.vars=c("sector")) %>% 
+         summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
+         ungroup %>% arrange(desc(mean), sector)
+
+### Iterate over sectors
+#create plot for each sector
+plots_i <- 
+  sectors_i$sector %>% lapply(function(sector_j){
+      df_j  <- plots_annual_bySector %>% filter(sector == sector_j)
+      ### Make plot 
+      ### Plot
+      plot_j  <- df_j %>% ggplot() +
+      ### Ribbon plot
+      geom_ribbon(aes(x=year, ymin = X025, ymax = X975),
+                  alpha=0.2) +
+      ### Mean Line
+      geom_line(aes(x=year, y=mean), 
+                linetype = 2, 
+                alpha=0.8) +
+      ### Scales
+      ggtitle(str_wrap(sector_j,20)) +
+      scale_x_continuous("Year", 
+                         breaks = seq(2000, 2100, by=25)) + #2300
+                         #breaks = seq(2020,2100, by =20)) +
+      scale_y_continuous("Billions",
+                        #"Annual Impacts\n(Billions)",
+                         labels=label_scientific(digits = 2)) + 
+      scale_fill_discrete("Sector") + 
+
+      ### Guides/Themes
+      guides(fill=guide_legend(ncol=2,byrow=FALSE)) +
+      theme_bw()+
+      theme(legend.position = "none",
+              axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                         hjust=1, size = 8),
+              axis.text.y = element_text(size = 8),
+              plot.title  = element_text(size = 8, face = "bold"),
+      strip.text  = element_text(size = 8),
+      axis.title  = element_text(size = 9))
+      ### Return
+      return(plot_j)
+    })
+
+
+### Make total plot
+df_j  <- plots_annual_bySector %>% 
+        group_by(year) %>%
+        summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X025=sum(X025, na.rm=T)/1e3, 
+                  X975=sum(X975, na.rm=T)/1e3) %>%
+        ungroup()
+      
+### Plot
+plot_j  <- df_j %>% 
+  ggplot() +
+  ### Ribbon plot
+  geom_ribbon(aes(x=year, ymin = X025, ymax = X975),
+                alpha=0.2) +
+  ### Mean Line
+  geom_line(aes(x=year, y=mean), 
+                linetype = 2, 
+                alpha=0.8) +
+  ### Scales
+  ggtitle(str_wrap('Total',20)) +
+  scale_x_continuous("Year", 
+                     breaks = seq(2000, 2100, by=25)) + 
+  scale_y_continuous("Trillions",
+                      labels=label_scientific(digits = 2)) + 
+  scale_fill_discrete("Sector") + 
+
+### Guides/Themes
+  guides(fill=guide_legend(ncol=2,byrow=FALSE)) +
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                  hjust=1, size = 8),
+        axis.text.y = element_text(size = 8),
+        plot.title  = element_text(size = 8, face = "bold"),
+        strip.text  = element_text(size = 8),
+        axis.title  = element_text(size = 9))
+
+       
+### Arrange plots
+### Add plots together
+num_plots = length(plots_i)+1
+for(j in 1:num_plots){
+  if(j == 1){ plot_i <- plots_i[[j]] 
+  } else if(j ==num_plots) { plot_i <- plot_i + plot_j
+  } else { plot_i <- plot_i + plots_i[[j]] 
+  }
+}
+### Layout
+plot_i <- plot_i + plot_layout(ncol = 3)
+plot_i <- plot_i + 
+          plot_annotation(title = "Annual Climate-Driven Impacts",
+                          caption = "")
+  
+plot_i
+
+ggsave(plot = plot_i, filename = 'fa02.tiff',width = 9,height = 12)
+
+```
+
+## Appendix Figure 4.  
+
+### Map - total annual damages map
+```{r Map_annual_total_damages,fig.height=5,fig.width=9,echo=FALSE}
+#***************************************************************  
+# map absolute damages
+
+#summarize mean across trials
+df_sector_region_sum <- df_fraw_2090reg %>%
+    mutate(annual_impacts = annual_impacts /1e9 * pricelevel_2015_to_2020) %>%
+    #calculate mean regional impacts across all sectors
+    group_by_at(c("region","sector","year")) %>%
+    summarize(value = mean(annual_impacts, na.rm=T)) %>%
+    ungroup
+    
+#sum across all sectors for each region
+df_region_sum <- df_sector_region_sum %>%
+    group_by_at(c("region","year")) %>%
+    summarize(annual_impacts = sum(value, na.rm=T)) %>%
+    ungroup
+  
+
+#Create dataframe by state (to be filled with impacts below)
+MainStates <- map_data('state')
+#Read in NCA regions
+NCA_regions <- read.csv(paste0(analysisPath,"/NCA_Regions.csv"))
+#Create dataframe with NCA region outlines
+state_map <- map("state", fill=T, plot =FALSE)
+state_map_match <- data.frame(name = state_map$names) %>%
+  separate(name, c("State","subregion"), sep= ":", remove=FALSE) %>%
+  left_join(NCA_regions %>% select(State,Region))
+rownames(state_map_match) <- state_map_match$name
+  
+#convert map to spatial polygon, then join with mapping table
+state_map <- map2SpatialPolygons(state_map, IDs=state_map$names)
+state_map <- SpatialPolygonsDataFrame(state_map, state_map_match)
+
+#remove invalidities in the state map
+invisible(gIsValid(state_map))
+state_map <- gBuffer(state_map, byid=TRUE, width = 0)
+invisible(gIsValid(state_map))
+
+#dissolve map by state? and fortify to dataframe
+area_map <- unionSpatialPolygons(state_map, IDs = state_map$Region)
+area_map <- fortify(area_map)
+area_map$group <- gsub(".1", "", x= area_map$group, fixed = T)
+
+plot_list <- list()
+plot_count <- 1
+
+#Get impacts data for each state (and scenario)
+df <- df_region_sum
+
+state_impacts <- data.frame(
+    region = unique(MainStates$region),
+    impacts = 0)
+  
+#Northwest
+state_impacts$impacts[state_impacts$region %in% c('washington','idaho',
+                                                  'oregon')] <- 
+    df$annual_impacts[df$region == 'Northwest']
+#Southwest
+state_impacts$impacts[state_impacts$region %in% 
+                          c('california','nevada',
+                            'utah','colorado','arizona','new mexico')] <-
+    df$annual_impacts[df$region == 'Southwest']
+#Northern Great Plains
+state_impacts$impacts[state_impacts$region %in% 
+                          c('montana','wyoming', 'north dakota',
+                            'south dakota','nebraska')] <-
+    df$annual_impacts[df$region == 'Northern Plains']
+#Southern Great Plains
+state_impacts$impacts[state_impacts$region %in% 
+                          c('kansas','oklahoma', 'texas')] <-
+    df$annual_impacts[df$region == 'Southern Plains']
+#Midwest
+state_impacts$impacts[state_impacts$region %in% 
+                          c('minnesota','iowa',
+                            'missouri','wisconsin','indiana',
+                            'illinois','michigan','ohio')] <-
+    df$annual_impacts[df$region == 'Midwest']
+#Southeast
+state_impacts$impacts[state_impacts$region %in% 
+                          c('arkansas','mississippi',
+                            'louisiana','alabama','georgia',
+                            'florida','south carolina',
+                            'tennessee','kentucky',
+                            'north carolina','virginia')] <-
+    df$annual_impacts[df$region == 'Southeast']
+#Northeast
+state_impacts$impacts[state_impacts$region %in% 
+                          c('west virginia','district of columbia',
+                            'delaware','maryland',
+                            'pennsylvania','new jersey','connecticut',
+                            'rhode island','new york','massachusetts',
+                            'vermont','new hampshire','maine')] <-
+    df$annual_impacts[df$region == 'Northeast']
+
+# Use the dplyr package to merge the MainStates and annual_impacts dataframes
+MergedStates <- inner_join(MainStates, state_impacts, by = "region")
+
+
+#plot regional map data
+p <- ggplot(data = MergedStates,
+            mapping=aes(x=long, y=lat, group=group,fill=(factor(impacts))))+
+    geom_polygon(color="white",size=0.2) + 
+    geom_polygon(data=area_map, 
+                 aes(x=long,y=lat,group=group), 
+                 fill=NA, 
+                 size=1,
+                 color="black") + 
+    scale_fill_brewer(palette = 'Greys', 
+                    guide = guide_legend(reverse=TRUE),
+                    labels=function(x) sprintf("$%1.0f", as.double(x)))+
+
+    theme_minimal()+  
+    theme(legend.key.size = unit(0.75, 'cm'),
+          legend.title = element_text(size=12),
+          legend.text = element_text(size=10),
+          legend.position = "right",
+          legend.box.margin = margin(t = 1, l = 1),
+          axis.ticks.x=element_blank(),
+          axis.ticks.y=element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          panel.background = 
+            element_rect(fill = "white",
+                         colour = "white",
+                         size = 0.5, 
+                         linetype = "solid"),
+          panel.grid.major = 
+            element_line(size = 0.5, 
+                         linetype = 'solid',
+                         colour = "white"),
+          panel.grid.minor = 
+            element_line(size = 0.5, 
+                         linetype = 'solid',
+                         colour = "white"))+
+    labs(title= '2090 Climate-Driven Damages by Region',
+         subtitle='Mean Damages from all Sectors',
+         x='',
+         y='',
+         fill= 'Damages (Billions)')
+
+  ggsave(plot = p, filename = 'fa04.tiff',width = 9,height = 5)
+  p
+  print(df_region_sum %>% 
+          mutate(across(c('annual_impacts'), ~ signif(.,2))))
+```
+
+### Absolute Regional sector pie charts
+```{r abs_category_piecharts, include=FALSE, echo = FALSE}
+  #make regional donut charts, by category (absolute)
+#already in 2020 dollars
+
+#specifies opacity
+darkop <- 'B3'
+
+
+plots_pie_regionmarginal <- df_sector_region_sum %>%
+  mutate(category = case_when(
+    sector %in% labor_cat ~ "Labor (1)",
+    sector %in% ag_cat ~ "Agriculture (1)",
+    sector %in% elect_cat ~ "Electricity (2)",
+    #sector %in% cil_health_cat ~ "Health (CIL) (6)",  
+    sector %in% ats_health_cat ~ "Health (6)",
+    sector %in% infrastructure_cat ~ "Infrastructure (7)",
+    sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
+    TRUE ~ NA_character_)) %>% 
+  mutate(color_f = case_when(
+    sector %in% labor_cat ~ paste0(colors_6[4],darkop),
+    sector %in% ag_cat ~ paste0(colors_6[2],darkop),
+    sector %in% elect_cat ~ paste0(colors_6[3],darkop),
+    sector %in% ats_health_cat ~ paste0(colors_6[6],darkop),
+    sector %in% infrastructure_cat ~ paste0(colors_6[5],darkop),
+    sector %in% eco_cat ~ paste0(colors_6[1],darkop),
+    TRUE ~ NA_character_)) %>% 
+  filter(category != "NA") %>% 
+  filter(value != 'NaN')%>%
+  arrange_at(.vars=c("value", "sector"))
+
+
+regions = unique(plots_pie_regionmarginal$region)
+plist <-list()
+count=0
+
+
+#category pie charts
+#for (iregion in regions){
+#  count = count+1
+#   p_temp <- plots_pie_regionmarginal %>%
+#    filter(region == iregion) %>%
+#    group_by_at(.vars=c("category","color_f")) %>% 
+#   summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
+#   ungroup %>% arrange_at(.vars=c("mean", "category","color_f"))
+#   #pie(p_temp$annual_impacts, labels='',col=p_temp$color_f)
+#   p <- ggplot(p_temp, aes(x = "", y = mean, 
+#                           fill = reorder(category,mean))) +
+#   geom_col(color = "black") +
+#   geom_text(aes(label = ''),
+#             position = position_stack(vjust = 0.5)) +
+#   coord_polar(theta = "y") +
+#   scale_fill_manual(values =(p_temp$color_f), 
+#                     guide = guide_legend(reverse=TRUE))+#,
+#                     #labels=function(x) sprintf("$%1.0f", as.double(x))) +
+#     theme_void()+
+#     labs(fill = "Categories",title = iregion)
+#   plist[[count]] <-p
+#   ggsave(p,filename = paste0('Figure9a_',iregion,'.tiff'),width = 5,height = 5)
+# }
+
+
+#sector pie charts
+# for (iregion in regions){
+#   count = count+1
+#   
+#   p_temp <- plots_pie_regionmarginal %>%
+#    filter(region == iregion) %>%
+#    group_by_at(.vars=c("sector","color_f")) %>% 
+#   summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
+#   ungroup %>% arrange_at(.vars=c("mean")) %>%
+#   filter(mean >=0) %>%
+#     arrange(desc(mean))%>%
+#     mutate(RowNum = row_number(),
+#            sector = ifelse(RowNum <= 4, sector, 'Remaining')) %>%
+#     group_by(sector) %>%
+#     summarise(mean = sum(mean)) %>%
+#     arrange(desc(mean))%>%
+#     mutate(sector = as.factor(sector)) %>%
+#     mutate(color_f = case_when(
+#     sector %in% c('ATS Extreme Temperature') ~ paste0(colors_7[7],darkop),
+#     sector %in% c('Air Quality') ~ paste0(colors_7[6],darkop),
+#     sector %in% c('Labor') ~ paste0(colors_7[5],darkop),
+#     sector %in% c('CIL Agriculture') ~ paste0(colors_7[4],darkop),
+#     sector %in% c('Rail') ~ paste0(colors_7[3],darkop),
+#     sector %in% c('High Tide Flooding and Traffic') ~ paste0(colors_7[2],darkop),
+#     sector %in% c('Roads') ~ paste0(colors_7[1],darkop),
+#     sector %in% c('Wildfire') ~ paste0('#c05600',darkop),
+#     sector %in% c('Wind Damage') ~ paste0('#446443',darkop),
+#     sector %in% c('Southwest Dust') ~ paste0('#936f38',darkop),
+#     sector %in% c('Remaining') ~ paste0('#D3D3D3',darkop)))
+#   
+#   #p_temp$sector <- factor(p_temp$sector)
+#   
+#   #pie(p_temp$annual_impacts, labels='',col=p_temp$color_f)
+#   
+#   p <- ggplot(p_temp, aes(x = "", y = mean, fill = reorder(sector,mean))) +
+#   geom_col(color = "black") +
+#   geom_text(aes(label = ''),
+#             position = position_stack(vjust = 0.5)) +
+#   coord_polar(theta = "y") +
+#   scale_fill_manual(values =rev(p_temp$color_f), 
+#                     guide = guide_legend(reverse=TRUE))+#,
+#                     #labels=function(x) sprintf("$%1.0f", as.double(x))) +
+#     theme_void()+
+#     labs(fill = "Top 4 Sectors",title = iregion)
+#   plist[[count]] <-p
+# }
+
+#plist
+
+
+#donut plots
+for (iregion in regions){
+  count = count+1
+  
+  p_temp <- plots_pie_regionmarginal %>%
+    filter(region == iregion) %>%
+    group_by_at(.vars=c("sector","color_f")) %>% 
+    summarize_at(.vars=c("value"),sum,na.rm=T) %>%
+    ungroup %>% 
+    arrange_at(.vars=c("value")) %>%
+    filter(value >=0) %>%
+    arrange(desc(value))%>%
+    mutate(RowNum = row_number(),
+           sector = ifelse(RowNum <= 4, sector, 'Remaining')) %>%
+    group_by(sector) %>%
+    summarise(value = sum(value)) %>%
+    arrange(desc(value))%>%
+    mutate(sector = as.factor(sector)) %>%
+    mutate(color_f = case_when(
+    sector %in% c('ATS Extreme Temperature') ~ paste0(colors_7[7],darkop),
+    sector %in% c('Air Quality') ~ paste0(colors_7[6],darkop),
+    sector %in% c('Labor') ~ paste0(colors_7[5],darkop),
+    sector %in% c('CIL Agriculture') ~ paste0(colors_7[4],darkop),
+    sector %in% c('Rail') ~ paste0(colors_7[3],darkop),
+    sector %in% c('High Tide Flooding and Traffic') ~
+      paste0(colors_7[2],darkop),
+    sector %in% c('Roads') ~ paste0(colors_7[1],darkop),
+    sector %in% c('Wildfire') ~ paste0('#c05600',darkop),
+    sector %in% c('Wind Damage') ~ paste0('#446443',darkop),
+    sector %in% c('Southwest Dust') ~ paste0('#936f38',darkop),
+    sector %in% c('Remaining') ~ paste0('#D3D3D3',darkop)))
+  
+  p_temp$fraction <- p_temp$value/sum(p_temp$value)
+  # Compute the cumulative percentages (top of each rectangle)
+  p_temp$ymax <- cumsum(p_temp$fraction)
+  # Compute the bottom of each rectangle
+  p_temp$ymin <- c(0, head(p_temp$ymax, n=-1))
+  # Compute label position
+  p_temp$labelPosition <- (p_temp$ymax + p_temp$ymin) / 2
+  # Compute a good label
+  p_temp$label <- paste0(format(round(100*p_temp$fraction, 0), 
+                                nsmall = 0),'%')
+  label2 = paste0(format(round(100*sum(p_temp$value)/
+                                 sum(plots_pie_regionmarginal$value),1),
+                         nsmall=1),'%')
+  
+
+  #plot donut data  
+  p <- ggplot(p_temp, aes(ymax = ymax, ymin = ymin,xmax = 4, xmin = 3, 
+                          fill = reorder(sector,(value)))) +
+    geom_rect() +
+    geom_text(x=4.25, 
+              aes(y=labelPosition,label=''),
+              size=5) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values =rev(p_temp$color_f), 
+                    guide = NULL)+
+                    #guide_legend(reverse=TRUE))+#,
+                    #labels=function(x) sprintf("$%1.0f", as.double(x))) +
+    theme_void()+
+    xlim(c(2,4))+
+    labs(fill = "Top 4 Sectors",title = paste(iregion,label2))
+    
+  #p
+  plist[[count]] <-p
+  ggsave(p,filename = paste0('FigureA4_',iregion,'.tiff'),width = 5,height = 5)
+
+}
+
+plist
+
+```
+## Appendix Figure 5.  
+
+Annual Damages Timeseries - all sectors (national total)
+
+
+Plot annual impacts by sector (National Totals)
+
+currently ordered by decreasing mean in 2090 - 
+could change to decreasing mean in 2300 or another variable
+
+```{r annual_bySector_2300,eval=TRUE,fig.height=12,fig.width=9,echo=FALSE}
+ plots_annual_bySector <- df_fstat %>%
+   #if plotting 2100 version
+   #filter(year <= 2100) %>%
+   #if plotting 2300 version
+   filter(year <= 2300 & year > 2100) %>%
+   mutate_at(.vars = c('X025','mean','X975'), 
+             function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
+   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
+
+#order sectors by decreasing mean in 2090  
+sectors_i <- plots_annual_bySector %>% 
+         filter(year ==2300) %>%
+         group_by_at(.vars=c("sector")) %>% 
+         summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
+         ungroup %>% arrange(desc(mean), sector)
+
+### Iterate over sectors
+#create plot for each sector
+plots_i <- 
+  sectors_i$sector %>% lapply(function(sector_j){
+      df_j  <- plots_annual_bySector %>% filter(sector == sector_j)
+      ### Make plot 
+      ### Plot
+      plot_j  <- df_j %>% ggplot() +
+      ### Ribbon plot
+      geom_ribbon(aes(x=year, ymin = X025, ymax = X975),
+                  alpha=0.2) +
+      ### Mean Line
+      geom_line(aes(x=year, y=mean), 
+                linetype = 2, 
+                alpha=0.8) +
+      ### Scales
+      ggtitle(str_wrap(sector_j,20)) +
+      scale_x_continuous("Year", 
+                         breaks = seq(2100, 2300, by=50)) + #2300
+                         #breaks = seq(2020,2100, by =20)) +
+      scale_y_continuous("Billions",
+                        #"Annual Impacts\n(Billions)",
+                         labels=label_scientific(digits = 2)) + 
+      scale_fill_discrete("Sector") + 
+
+      ### Guides/Themes
+      guides(fill=guide_legend(ncol=2,byrow=FALSE)) +
+      theme_bw()+
+      theme(legend.position = "none",
+              axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                         hjust=1, size = 8),
+              axis.text.y = element_text(size = 8),
+              plot.title  = element_text(size = 8, face = "bold"),
+      strip.text  = element_text(size = 8),
+      axis.title  = element_text(size = 9))
+      ### Return
+      return(plot_j)
+    })
+
+
+### Make total plot
+df_j  <- plots_annual_bySector %>% 
+        group_by(year) %>%
+        summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X025=sum(X025, na.rm=T)/1e3, 
+                  X975=sum(X975, na.rm=T)/1e3) %>%
+        ungroup()
+      
+### Plot
+plot_j  <- df_j %>% 
+  ggplot() +
+  ### Ribbon plot
+  geom_ribbon(aes(x=year, ymin = X025, ymax = X975),
+                alpha=0.2) +
+  ### Mean Line
+  geom_line(aes(x=year, y=mean), 
+                linetype = 2, 
+                alpha=0.8) +
+  ### Scales
+  ggtitle(str_wrap('Total',20)) +
+  scale_x_continuous("Year", 
+                     #breaks = seq(2020,2100, by =20)) +2300
+                     breaks = seq(2100, 2300, by=50)) +
+  scale_y_continuous("Trillions",
+                      labels=label_scientific(digits = 2)) + 
+  scale_fill_discrete("Sector") + 
+
+### Guides/Themes
+  guides(fill=guide_legend(ncol=2,byrow=FALSE)) +
+  theme_bw()+
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                  hjust=1, size = 8),
+        axis.text.y = element_text(size = 8),
+        plot.title  = element_text(size = 8, face = "bold"),
+        strip.text  = element_text(size = 8),
+        axis.title  = element_text(size = 9))
+
+       
+### Arrange plots
+### Add plots together
+num_plots = length(plots_i)+1
+for(j in 1:num_plots){
+  if(j == 1){ plot_i <- plots_i[[j]] 
+  } else if(j ==num_plots) { plot_i <- plot_i + plot_j
+  } else { plot_i <- plot_i + plots_i[[j]] 
+  }
+}
+### Layout
+plot_i <- plot_i + plot_layout(ncol = 3)
+plot_i <- plot_i + 
+          plot_annotation(title = "Annual Climate-Driven Impacts",
+                          caption = "")
+  
+plot_i
+
+ggsave(plot = plot_i, filename = 'fa05.tiff',width = 9,height = 12)
+
+```
+
+##Appendix Figure 6 
+SCGHG - Discounting Method Box Plot
+
+```{r FigureA6, fig.height=5, fig.width=7, echo=FALSE}
+
+## full streams
+#data <- scghg_data %>%
+#        mutate(adaptation = 'Default Adaptation')
+
+data <- scghg_data
+
+##########################
+######### by discount rate
+##########################
+
+## plot data specific to this plot
+plot.data = data %>% 
+  filter(discount.rate %in% 
+           c('1.5% Ramsey', '2.0% Ramsey', '2.5% Ramsey', "3.0% Ramsey","3.0% CDR"), #2.0% CDR #Figure A6
+           #c('1.5% Ramsey', '2.0% Ramsey', '2.5% Ramsey', "3.0% Ramsey"), #Figure 6
+         emissions.year==2020) %>% 
+  distinct() %>% 
+  arrange(trial) %>% 
+  ungroup()
+
+## select grouping
+group = c('emissions.year', 'gas', 'discount.rate')
+
+## labels
+plot.data %<>% group_by_at(group) %>%
+  mutate(scghg.mean  = mean(scghg),
+         scghg.lower = quantile(scghg,.025),
+         scghg.upper = quantile(scghg,.975),
+         scghg.75 = quantile(scghg,.75),
+         label.position = mean(scghg)) %>%
+  ungroup()
+
+
+## ordering of central rate for alpha transparency
+plot.data$discount.rate <- factor(plot.data$discount.rate, 
+                                  levels=c("1.5% Ramsey", "2.0% Ramsey", 
+                                           "2.5% Ramsey", "3.0% Ramsey",
+                                           "2.0% CDR","3.0% CDR"))
+
+## ordering of damage functions
+#plot.data$adaptation <- factor(plot.data$adaptation, 
+#                               levels=c('Default Adaptation'))
+
+## all three just the boxplot
+## function to help with boxplots
+quantiles_95 <- function(x) {
+  r <- quantile(x, probs=c(.025, 0.25, 0.5, 0.75, 0.975))
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
+
+## function for labels
+means = plot.data %>% 
+  group_by(discount.rate) %>% 
+  summarise(means=mean(scghg)) %>% 
+  mutate(across(c('means'), ~ signif(.,2))) 
+
+p <- plot.data %>%
+  ggplot() +
+  stat_summary(aes(x=scghg, y=discount.rate, color=discount.rate,
+                   fill=discount.rate),
+               alpha    = 0.5,
+               geom     = "boxplot",
+               fun.data = quantiles_95, 
+               width    = 0.5, 
+               #position = position_dodge(.9),
+               show.legend=T) + 
+  stat_summary(aes(x=scghg, y=discount.rate, color=discount.rate),
+               alpha = 1,
+               fun   = mean, 
+               geom  = "point", 
+               shape = 8, 
+               size  = 4, 
+               #position = position_dodge(.9),
+               show.legend=F) +
+  geom_text(data=means, 
+            aes(x=means, y=discount.rate, group=discount.rate, 
+                label=paste0('$', round(means, 2)), vjust=-1.5),
+            position = position_dodge(1.3),
+            color    = 'grey20',
+            size     = 4,
+            family   = "sans-serif") +
+  labs(
+    # title = 'XXX')),
+    x     = expression(paste('Dollars per ton of ', CO[2])),
+    y     = '',
+    color = 'Discount Rate',
+    fill  = 'Discount Rate',
+    alpha = 'Discount Rate') +
+  scale_x_continuous(
+  #  limits = c(0,110),
+  #  # breaks = seq(0,5,1), 
+    labels = scales::dollar)+#,
+  #  expand = expansion(mult=c(0,0))) +
+  scale_y_discrete(expand = expansion(mult=c(0.0,0))) +
+  scale_color_manual(values = colors_6) +
+  scale_fill_manual(values  = colors_6) +
+  coord_cartesian(xlim = c(0,quantile(plot.data$scghg,0.99))) + #0.985
+  theme_minimal() +
+  theme(legend.position = c(0.75, 0.65),
+        legend.title    = element_text(size=12),
+        legend.text     = element_text(size=12),
+        legend.key.size = unit(0.75, 'cm'),
+        legend.margin   = margin(-10, 0, 0, 0),
+        axis.title.x    = element_text(size=14,hjust=0.5,vjust=-0.5),
+        axis.text       = element_text(size=12),
+        #axis.text.x = element_text(scales::dollar),
+        axis.text.y     = element_blank(),
+        plot.caption    = element_text(size=11, hjust=0.5),
+        #text           = element_text(family="sans-serif", color='grey20')) +
+        text            = element_text( color='grey20')) +
+  guides(color = guide_legend(reverse = T),
+         fill  = guide_legend(reverse = T, 
+                              override.aes = list(linetype = 0, alpha=0.7)),
+         alpha = guide_legend(reverse = T))#
+ 
+
+p
+
+ggsave(p, filename = 'fa06.tiff', width=7, height=3.5, bg = 'white')
+```

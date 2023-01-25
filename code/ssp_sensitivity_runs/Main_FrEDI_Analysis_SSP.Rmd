@@ -1,0 +1,415 @@
+---
+title: "FrEDI - Main R Notebook - to form the basis of quick turn-around FrEDI analyses"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+-------------------------------------------------------------------------------------------------------------------------------------
+This Notebook walks through a standard FrEDI Analysis Process and makes calls to global functions
+Steps include:
+0. Specify working directory and FrEDI analysis directory
+1. Initialize FrEDI
+2. Run FrEDI
+3. Aggregate FrEDI
+4. Plot FrEDI
+
+-----
+
+#Step 0. Specify Directories
+```{r}
+
+## Instructions: Specify directories
+# Working_Director = Directory where analysis is being conducted (i.e., location of input files and where outputs
+#                     should be saved)
+# FrEDI_Analysis_Directory = Directory where the FrEDI global analysis scripts are located
+#require(tidyverse)
+require(dplyr)
+wd <- getwd()
+#setwd("~/CCD-CSIB/FrEDI/Code/CSIB-Analysis")
+Project_Directory <- paste0(wd,'')
+FrEDI_Analysis_Directory<- paste0(wd,'/Global_Scripts')
+print(Project_Directory)
+print(FrEDI_Analysis_Directory)
+
+rff_path <- file.path("../../") %>% file.path("FrEDI_SCC","SCC_FrEDI","data",
+                                              "input_files", "temp_baseline")
+ssp_path <- file.path("../../") %>% file.path("data","external","ssp")
+external_path <- file.path('..','..','data','external')
+```
+
+#Step 1. Initialize FrEDI & Utility Functions
+```{r,install}
+
+#Instructions: specify whether FrEDI has already been installed (=TRUE) or not (=FALSE)
+source( paste0(FrEDI_Analysis_Directory, "/Global_FrEDI.R"))
+
+Inst_flag <- TRUE #FALSE if FrEDI is already installed
+branch = 'FrEDI_2300'
+Inst_FrEDI (Inst_flag, branch)
+
+#if Feather is already installed, set flag to FALSE
+#Inst_flag <- FALSE #feather is already installed
+#Inst_Feather (Inst_flag)
+
+#if already installed, set flag to FALSE
+Inst_flag <- FALSE #feather is already installed
+Inst_plotfuns (Inst_flag)
+
+require('readxl')
+require('tibble')
+require('magrittr')
+require('tidyverse')
+require('arrow')
+
+## if remove.packages('FrEDI') does not work:
+## detach("package:FrEDI", unload = TRUE)
+```
+
+#Step 2. Format FrEDI Inputs 
+
+## from pre-processed 'Benveniste' files
+```{r, formatinputs_benveniste,eval=FALSE}
+
+scenarios <- c('SSP119','SSP126','SSP245','SSP370','SSP370_lowNTCF','SSP434','SSP460','SSP534','SSP585')
+
+#format SSP data
+##########################
+##############  population
+##########################
+# SSP population in millions - need to convert to #s
+
+#regional information
+fredi_scenario_pop = external_path %>%
+  file.path('20220701_FrEDI_config.xlsx') %>%
+  read_excel(sheet = 'defaultScenario', range = 'C3:K20')
+
+## get regional proportions
+pop_proportions = fredi_scenario_pop %>% 
+  mutate(total = rowSums(select(., starts_with("pop_"))),
+      Northern.Plains.prop = pop_Northern.Plains/total,
+      Southern.Plains.prop = pop_Southern.Plains/total,
+      Midwest.prop         = pop_Midwest/total,
+      Northeast.prop       = pop_Northeast/total,
+      Northwest.prop       = pop_Northwest/total,
+      Southeast.prop       = pop_Southeast/total,
+      Southwest.prop       = pop_Southwest/total) %>% 
+  select(year, contains('.prop')) %>% 
+  complete(year = seq(min(year), 2300, 5)) %>% 
+  fill(-year)
+
+for (iscenario in scenarios){
+  print(iscenario)
+    if (grepl('SSP1',iscenario)){
+      pop <- ssp_path %>% file.path("Benveniste_SSP1.csv")
+    } else if (grepl('SSP2',iscenario)) {
+      pop <- ssp_path %>% file.path("Benveniste_SSP2.csv")
+    } else if (grepl('SSP3',iscenario)) {
+      pop <- ssp_path %>% file.path("Benveniste_SSP3.csv")
+    } else if (grepl('SSP4',iscenario)) {
+      pop <- ssp_path %>% file.path("Benveniste_SSP4.csv")
+    } else if (grepl('SSP5',iscenario)) {
+      pop <- ssp_path %>% file.path("Benveniste_SSP5.csv")
+    }
+  pop <- pop %>% read_csv(col_types = cols()) %>%
+    filter(country =='USA')%>%
+    select(year, pop) %>%
+    filter(year %in% seq(2010, 2300, 5)) %>%
+    mutate(pop = pop*1e6)
+  
+  ## create regional pop from ssp
+  pop_regional = pop %>% 
+    left_join(pop_proportions) %>% 
+    mutate(`Northern Plains` = pop * Northern.Plains.prop,
+         `Southern Plains` = pop * Southern.Plains.prop,
+         Midwest           = pop * Midwest.prop,
+         Northeast         = pop * Northeast.prop,
+         Northwest         = pop * Northwest.prop,
+         Southeast         = pop * Southeast.prop,
+         Southwest         = pop * Southwest.prop) %>% 
+    select(year, `Northern Plains`, `Southern Plains`, Midwest, Northeast, Northwest, Southeast, Southwest)
+
+  ## export as inputs to fredi
+  pop_regional %>%
+    write_csv(Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_pop.csv')))
+  
+}
+
+##########################
+##############  gpd
+##########################
+# SSP GDP in billion 2005$ USD
+
+## SSPs are in 2005$, inflate to 2015 USD; recovered 1/13/2022: https://apps.bea.gov/iTable/iTable.cfm?reqid=19&step=3&isuri=1&select_all_years=0&nipa_table_list=13&series=a&first_year=2005&last_year=2015&scale=-99&categories=survey&thetable=
+pricelevel_2005_to_2015 = 104.691/87.504
+
+for (iscenario in scenarios){
+  print(iscenario)
+    if (grepl('SSP1',iscenario)){
+      gpd <- ssp_path %>% file.path("Benveniste_SSP1.csv")
+    } else if (grepl('SSP2',iscenario)) {
+      gpd <- ssp_path %>% file.path("Benveniste_SSP2.csv")
+    } else if (grepl('SSP3',iscenario)) {
+      gpd <- ssp_path %>% file.path("Benveniste_SSP3.csv")
+    } else if (grepl('SSP4',iscenario)) {
+      gpd <- ssp_path %>% file.path("Benveniste_SSP4.csv")
+    } else if (grepl('SSP5',iscenario)) {
+      gpd <- ssp_path %>% file.path("Benveniste_SSP5.csv")
+    }
+## compile gdp data
+gdp = gpd %>% read_csv(col_types = cols()) %>%
+  filter(country =='USA')%>%
+  rename(gdp_usd = gdp) %>%
+  select(year, gdp_usd) %>% 
+  filter(year %in% seq(2010, 2300, 5)) %>% 
+  mutate(gdp_usd     = gdp_usd * pricelevel_2005_to_2015 * 1e9,
+         dollar.year = 2015)
+
+## export scenario-specific files to read into fredi
+  gdp %>% 
+    #filter(trial==j) %>% 
+    select(year, gdp_usd) %>% 
+    write_csv(Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_gdp.csv')))
+}
+
+```
+
+
+## format the raw input data from IIASA database (only extends to 2100 (values held constant after))
+```{r, formatinputs_IIASA}
+
+#scenarios <- c('SSP119','SSP126','SSP245','SSP370','SSP370_lowNTCF','SSP434','SSP460','SSP534','SSP585')
+scenarios <- c('SSP119','SSP245','SSP370','SSP585')
+
+
+#format SSP data
+##########################
+##############  population
+##########################
+# SSP population in millions - need to convert to #s
+
+#regional information
+fredi_scenario_pop = external_path %>%
+  file.path('20220701_FrEDI_config.xlsx') %>%
+  read_excel(sheet = 'defaultScenario', range = 'C3:K20')
+
+## get regional proportions
+pop_proportions = fredi_scenario_pop %>% 
+  mutate(total = rowSums(select(., starts_with("pop_"))),
+      Northern.Plains.prop = pop_Northern.Plains/total,
+      Southern.Plains.prop = pop_Southern.Plains/total,
+      Midwest.prop         = pop_Midwest/total,
+      Northeast.prop       = pop_Northeast/total,
+      Northwest.prop       = pop_Northwest/total,
+      Southeast.prop       = pop_Southeast/total,
+      Southwest.prop       = pop_Southwest/total) %>% 
+  select(year, contains('.prop')) %>% 
+  complete(year = seq(min(year), 2300, 5)) %>% 
+  fill(-year)
+
+for (iscenario in scenarios){
+  print(iscenario)
+    if (grepl('SSP1',iscenario)){
+      pop_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP1_pop.xlsx'))
+    } else if (grepl('SSP2',iscenario)) {
+      pop_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP2_pop.xlsx'))
+    } else if (grepl('SSP3',iscenario)) {
+      pop_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP3_pop.xlsx'))
+    } else if (grepl('SSP4',iscenario)) {
+      pop_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP4_pop.xlsx'))
+    } else if (grepl('SSP5',iscenario)) {
+      pop_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP5_pop.xlsx'))
+    }
+  pop <- pop_file %>% read_xlsx(n_max = 1) %>%
+    select(c(6:24)) %>%
+    t %>%
+    as.data.frame %>%
+    tibble::rownames_to_column("year")
+  colnames(pop)[2] <- 'pop'
+  pop[, 'year'] <- sapply(pop[, 'year'], as.integer)
+  
+  
+  ## create regional pop from ssp
+  pop_regional = pop %>% 
+    mutate(pop=pop*1e6) %>%
+    complete(year = seq(min(year), 2300, 5)) %>% 
+    fill(-year) %>%
+    left_join(pop_proportions) %>% 
+    mutate(`Northern Plains` = pop * Northern.Plains.prop,
+         `Southern Plains` = pop * Southern.Plains.prop,
+         Midwest           = pop * Midwest.prop,
+         Northeast         = pop * Northeast.prop,
+         Northwest         = pop * Northwest.prop,
+         Southeast         = pop * Southeast.prop,
+         Southwest         = pop * Southwest.prop) %>% 
+    select(year, `Northern Plains`, `Southern Plains`, Midwest, Northeast, Northwest, Southeast, Southwest)
+
+  ## export as inputs to fredi
+  pop_regional %>%
+    write_csv(Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_pop.csv')))
+  
+}
+
+##########################
+##############  gpd
+##########################
+# SSP GDP in billion 2005$ USD
+
+## SSPs are in 2005$, inflate to 2015 USD; recovered 1/13/2022: https://apps.bea.gov/iTable/iTable.cfm?reqid=19&step=3&isuri=1&select_all_years=0&nipa_table_list=13&series=a&first_year=2005&last_year=2015&scale=-99&categories=survey&thetable=
+pricelevel_2005_to_2015 = 104.691/87.504
+
+for (iscenario in scenarios){
+  print(iscenario)
+    if (grepl('SSP1',iscenario)){
+      gpd_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP1_gdp.xlsx'))
+    } else if (grepl('SSP2',iscenario)) {
+      gpd_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP2_gdp.xlsx'))
+    } else if (grepl('SSP3',iscenario)) {
+      gpd_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP3_gdp.xlsx'))
+    } else if (grepl('SSP4',iscenario)) {
+      gpd_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP4_gdp.xlsx'))
+    } else if (grepl('SSP5',iscenario)) {
+      gpd_file <- Project_Directory %>% file.path("IIASA",paste0('IIASA_SSP5_gdp.xlsx'))
+    }
+  ## read in and format gdp data
+  gdp <- gpd_file %>% read_xlsx(n_max = 1) %>%
+    select(c(6:24)) %>%
+    t %>%
+    as.data.frame %>%
+    tibble::rownames_to_column("year")
+  colnames(gdp)[2] <- 'gdp_usd'
+  gdp[, 'year'] <- sapply(pop[, 'year'], as.integer)
+
+  gdp <- gdp %>%
+    complete(year = seq(min(year), 2300, 5)) %>% 
+    fill(-year) %>%
+    mutate(gdp_usd     = gdp_usd * pricelevel_2005_to_2015 * 1e9,
+         dollar.year = 2015)
+    
+  
+  ## export scenario-specific files to read into fredi
+  gdp %>% 
+    #filter(trial==j) %>% 
+    select(year, gdp_usd) %>% 
+    write_csv(Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_gdp.csv')))
+}
+
+```
+
+
+
+
+#Step 3. Run FrEDI
+```{r, runfredi, include=FALSE,eval=TRUE}
+
+##########################
+##############  run fredi
+##########################
+
+## FrEDI parameters
+SectorListFlag <- NULL   #if NULL, all sectors output. See FrEDI:get_sectorInfo() for list of all sectors
+aggLevelFlag <- c("impactyear", "national", "modelaverage")    #Options: at least one from c('national', 'modelaverage', 'impactyear', 'impacttype', 'all'). 
+pvFlag <- FALSE          #Options: TURE/FALSE. TRUE <- calculate present values for annual impacts
+baseYearFlag <- 2010     #Specify base year for calculating present values of annual impacts
+rateFlag <- NULL         #Specify the annual discount rate used to calculate present values
+elasticityFlag <- 1   #Specify numeric elasticity used to adjust VSL
+silentFlag <- TRUE       #Options: TRUE/FALSE. Specify the level of messaging to the user (CURRENT ERROR IF FALSE)
+  
+for (iscenario in scenarios){
+  print(iscenario)
+  tempInputFile <- Project_Directory %>% file.path("SSP_fair_output",paste0(iscenario,'_globaltemp_4FrEDI.csv')) 
+  slrInputFile <- NULL
+  gdpInputFile <- Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_gdp.csv'))
+  popInputFile <- Project_Directory %>% file.path("SSP_fredi_input",paste0(iscenario,'_pop.csv'))
+  popformFlag = 'wide'
+  temptypeflag <- 'global'
+  inputs_list <- import_inputs(tempfile = tempInputFile,
+                      slrfile = slrInputFile,
+                      popfile = popInputFile,
+                      gdpfile = gdpInputFile,
+                      temptype = "global",
+                      popform = popformFlag)
+    
+  #aggLevel Details:
+  # Use FrEDI:aggregate_impacts() helper functions
+  # national: annual values summed across all regions
+  ## Run FrEDI with specified inputs
+  output_df <- run_fredi(inputsList= inputs_list, 
+                sectorList = SectorListFlag,
+                aggLevels=aggLevelFlag,
+                pv = pvFlag,
+                thru2300   = TRUE,
+                baseYear = baseYearFlag,
+                rate = rateFlag,
+                elasticity = elasticityFlag,
+                silent = silentFlag
+                )  
+  ## Write Full Dataframe to CSV (or feather)
+  #write.csv(output_df, Project_Directory %>% file.path(paste0('Output_',scenario,'_df.csv')))
+  write_parquet(output_df, Project_Directory %>% file.path('fredi_output',paste0('Output_',iscenario,'_df.parquet')))
+  
+}
+```
+
+
+
+
+```{r create_national_sector_dataframe}
+
+#Calculate total annual impacts from all sectors (for the US) in the year 2090
+
+
+### Specify Variant, ImpactType, and ImpactYear Options:###
+out <- list()
+out_nat <- list()
+
+## FrEDI SCC results are in 2020$, inflate to 2020 USD; recovered 1/13/2022: 
+#https://apps.bea.gov/iTable/iTable.cfm?reqid=19&step=3&isuri=1&select_all_years=0&nipa_table_list=13&series=a&first_year=2015&last_year=2020&scale=-99&categories=survey&thetable=
+pricelevel_2015_to_2020 = 113.784/104.691
+
+for (iscenario in scenarios) {
+  print(iscenario)
+  df_scenario <- read_parquet(Project_Directory %>% file.path('fredi_output',paste0('Output_',iscenario,'_df.parquet')))
+  df_filter <- df_scenario %>%
+    filter(sectorprimary ==1,
+           model %in% c('Average','Interpolation'),
+           region == "National Total",
+           year == 2090,
+           !sector %in% 
+             (c('CIL Extreme Temperature','Extreme Temperature','Asphalt Roads'))) %>%
+    #sum over impact types
+    group_by_at(c("sector","year")) %>%
+    summarize_at(c("annual_impacts","physical_impacts"), sum, na.rm=T) %>%
+    mutate(annual_impacts = annual_impacts * pricelevel_2015_to_2020/1e9, #billions
+           scenario = iscenario) %>%
+    ungroup# %>%
+    
+  out[[iscenario]] <- df_filter %>% as.data.frame
+  
+
+  #summarize across all sectors for national totals and model averages
+  df_nat_sum <- df_filter %>%
+    summarize_at(c("annual_impacts","physical_impacts"), sum, na.rm=T) %>%
+    ungroup %>%
+    mutate(scenario = iscenario)
+  out_nat[[iscenario]] <- df_nat_sum %>% as.data.frame
+  
+}
+
+out
+out_nat
+
+```
+
