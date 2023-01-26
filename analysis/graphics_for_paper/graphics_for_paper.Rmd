@@ -1,6 +1,6 @@
 ---
 title: "Figures for FrEDI NPD Paper"
-author: "Industrial Economics, Inc, updated by CH and EM"
+author: "CH, EM"
 use:    "Contains figures for FrEDI NPD paper"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -41,6 +41,7 @@ require(tidytext)
 require(scales)
 require(patchwork)
 require(paletteer)
+require(readxl)
 ```
 
 ### Paths
@@ -50,30 +51,29 @@ Set paths to files
 ```{r set_paths, include = FALSE}
 ###### Set code paths ######
 ### Path to main folder
-npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
-
-#npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
+#npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
+npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
 
 ###### Set output paths ######
 #perturb_gas    <- "co2"
 #perturb_year   <- 2020
 ## Constrained/transformed path
-NPDPath <-  npdPath %>% file.path("output","npd_damage_transformation")
-damage_prefix  <- "damages" 
-damagePath     <- npdPath %>% file.path("output", "damages", "rffsp"); 
+#NPDPath <-  npdPath %>% file.path("output","npd_damage_transformation")
+#damage_prefix  <- "damages" 
+#damagePath     <- npdPath %>% file.path("output", "damages", "rffsp"); 
 
-damage_ftype   <- "parquet"
+#damage_ftype   <- "parquet"
 ### Files to iterate over
-c_iteration  <- damagePath %>% file.path("damages") %>% list.files(pattern = "\\_constrained.parquet") %>%
-  (function(x){sub("\\_constrained.parquet", "", x)}) %>%
-  (function(x){sub("damages_", "", x)}) %>%
-  as.numeric %>% sort; 
-  c_iteration %>% length
+#c_iteration  <- damagePath %>% file.path("damages") %>% list.files(pattern = #"\\_constrained.parquet") %>%
+#  (function(x){sub("\\_constrained.parquet", "", x)}) %>%
+#  (function(x){sub("damages_", "", x)}) %>%
+#  as.numeric %>% sort; 
+#  c_iteration %>% length
 
 
 
 ###### For data outputs ######
-stats_outPath    <- damagePath %>% file.path("output_stats")
+#stats_outPath    <- damagePath %>% file.path("output_stats")
 
 ### Temperature input file path
 inputPath        <- npdPath %>% file.path("data", "input_files")
@@ -83,42 +83,14 @@ analysisPath     <- npdPath %>% file.path("analysis", "graphics_for_paper")
 
 ### Current path for where aggregate fredi dataframes are stored ###
 frediDataPath  <- npdPath %>% file.path("output", "damages","fredi_analysis")
+frediSVPath  <- npdPath %>% file.path("output", "damages","FrEDI_sv")
 
 
 ```
 
-### Common Values
 
+### Global Variables
 
-#### Conversion Factors
-
-<!-- From Corinne's email -->
-<!-- ```{r, eval = F} -->
-<!-- mutate(diff =  perturbed - baseline) %>% -->
-<!--   # divide by pulse size for every year after I take the difference -->
-<!--   # pulse is 1 Mt CO2 -->
-<!--   # $/ton of CO2 -->
-<!--   # mutate(diff = diff / 1000000000) %>% # Gt to ton of CO2 -->
-<!--   mutate(diff = diff / 10^9) %>% # Gt to ton of CO2 -->
-<!--   mutate(diff = diff * (12/44)) -->
-<!-- ``` -->
-
-<!-- * "Perturbed" runs are baseline runs that include a one-time pulse of 1 gigaton of carbon dioxide in 2020 -->
-
-
-#### Sector Groups and Sectors
-
-<!-- No sector groups at the moment -->
-
-Sector groups from GIVE. Sector group to sector crosswalk (relating FrEDI sectors and GIVE sector groups). The FrEDI sectors in the table below were selected based on EPA guidance on which sectors are most directly comparable.
-
-#### Variables for Grouping and Summarizing
-
-Variables for grouping and summarizing: Information about variables for summarizing by sector group.
-
-#### Global Variables
-
-Select years
 
 ```{r c_eraYears, include = FALSE, echo = FALSE}
 c_eraYears  <- c(2050,2070,2090)
@@ -160,7 +132,7 @@ pricelevel_2015_to_2020 = 113.784/104.691
 
 ```{r load_analysis_data, echo=FALSE}
 
-#these files are created by the 5_fredi_analysis.R script
+#these files are created by the 4_fredi_analysis.R script
 
 # All years, all trials, national annual impacts
 df_fraw_nat1 <- read_parquet(frediDataPath %>%
@@ -188,19 +160,19 @@ remove(df_fstat1); remove(df_fstat2); remove(df_fstat3); remove(df_fstat4); remo
 
 # 2090, all trials, regional annual impacts
 df_fraw_2090reg <- read_parquet(frediDataPath %>%
-                            file.path("impacts_reg_2090.parquet"))
+                            file.path("impacts_reg_2090_constrained.parquet"))
 
 # 2090, regional annual impact stats
 df_fstat_2090reg  <- read_parquet(frediDataPath %>% 
-                            file.path("impacts_reg_2090_stats.parquet"))
+                            file.path("impacts_reg_2090_stats_constrained.parquet"))
 
 # 2090, all trials, annual impacts for sectors with adaptation
 df_fraw_2090adapt <- read_parquet(frediDataPath %>%
-                            file.path("impacts_adapt_2090.parquet"))
+                            file.path("impacts_adapt_2090_constrained.parquet"))
 
 # 2090, annual impact stats for sectors with adaptation
 df_fstat_2090adapt <- read_parquet(frediDataPath %>%
-                            file.path("impacts_adapt_2090_stats.parquet"))
+                            file.path("impacts_adapt_2090_stats_constrained.parquet"))
 
 # 2090, all trials, sectors with physical impacts
 df_fraw_phys2090nat <- read_parquet(frediDataPath %>%
@@ -210,15 +182,18 @@ df_fraw_phys2090nat <- read_parquet(frediDataPath %>%
 df_fstat_2090phys<- read_parquet(frediDataPath %>% 
                             file.path("phys_impacts_nat_2090_stats.parquet"))
 
-# SCGHG full data stream (too big to push to repo)
-#scghg_data <- read_parquet(file.path(scghgPath,
-#             "co2_full_streams_2020_national_default_adaptation.parquet"))
-
 # load pre-processed files instead
 damage_share_data <- read_parquet(file.path(frediDataPath,
-              "Damage_GDP_Share_2100.parquet"))
-scghg_data <- read_parquet(file.path(frediDataPath,
-              "scghg_by_trial.parquet"))
+              "Damage_GDP_Share_2100_constrained.parquet"))
+
+npd_data <- read_parquet(file.path(frediDataPath,
+              "npd_by_trial_constrained.parquet"))
+
+# load pre-processed SV data
+aq_sv <- read_excel(file.path(frediSVPath,"FrEDI_SV_Outputs_Air Quality - Premature Mortality.xlsx"), sheet = "FrEDI Outputs 1")
+
+labor_sv <- read_excel(file.path(frediSVPath,"FrEDI_SV_Outputs_Labor.xlsx"), sheet = "FrEDI Outputs 1")
+
 
 ```
 
@@ -384,7 +359,7 @@ df_1 <- plots_stackedBar_bySector %>%
            #2050, 2070, and 2090, colored by sector category' )+
 
 df_1
-ggsave(plot = df_1, filename = 'Figure2a.tiff',width = 5,height = 4)
+ggsave(plot = df_1, filename = 'fig02.tiff',width = 5,height = 4)
 
 print(df_1$data %>% filter(year == 2090) %>%
         #group_by_at("damageType") %>%
@@ -438,7 +413,7 @@ df_1 <- plots_stackedBar_bySector %>%
                      width = 0.25,
                      size=1)
  df_1
- ggsave(plot = df_1, filename = 'fig02.tiff',width = 5,height = 4)
+ ggsave(plot = df_1, filename = 'fig02_uncertainty.tiff',width = 5,height = 4)
  
  
 #show in billions of 2020 USD
@@ -552,7 +527,7 @@ units <- 'Billions'
     stat_summary(fun=mean,geom = "point",
                  shape=23,
                  color='black')+
-    scale_y_continuous(sec.axis=dup_axis())+
+    scale_y_continuous(sec.axis=dup_axis(),limits=c(0,10250))+
     scale_fill_manual(values=rev(colors_6))+  
     labs(x='',
          y=paste0('Damages (',units,')'),
@@ -823,7 +798,7 @@ p <- ggplot(data = MergedStates,
                x='',
                y='')
   
-  ggsave(plot = p, filename = 'fig04.tiff',width = 9,height = 5)
+  ggsave(plot = p, filename = 'fig04_map.tiff',width = 9,height = 5)
   p
   
   print(df_region_sum %>% 
@@ -951,11 +926,6 @@ plist
 
 ```{r Figure5, fig.height=6, fig.width=9, echo=FALSE}
 
-#this needs to run on DMAP
-
-#data <- scghg_data %>%
-#        mutate(adaptation = 'Default Adaptation')
-
 
 data <- damage_share_data %>%
   rename(value = "damages.baseline.pct") %>%
@@ -1030,7 +1000,7 @@ data %>%
          linetype = guide_legend(reverse=T))
 
 ## export 
-ggsave(filename = 'Figure5.tiff', width = 9, height = 6)
+ggsave(filename = 'fig05.tiff', width = 9, height = 6, bg = 'white')
 
 df <- data %>% 
   filter(year %in% c(2090, 2100, 2300))
@@ -1042,11 +1012,8 @@ print(df %>%
 
 ```{r Figure6, fig.height=5, fig.width=7, echo=FALSE}
 
-## full streams
-#data <- scghg_data %>%
-#        mutate(adaptation = 'Default Adaptation')
 
-data <- scghg_data
+data <- npd_data
 
 ##########################
 ######### by discount rate
@@ -1159,7 +1126,7 @@ p <- plot.data %>%
 
 p
 
-ggsave(p, filename = 'f06.tiff', width=7, height=3.5, bg = 'white')
+ggsave(p, filename = 'fig06.tiff', width=7, height=3.5, bg = 'white')
 
 ```
 
@@ -1292,6 +1259,239 @@ plot_i
 ggsave(plot = plot_i, filename = 'fa02.tiff',width = 9,height = 12)
 
 ```
+
+## Appendix Figure 3.
+plot SV results - raw data created elsewhere
+graphics_for_paper/FrEDI_SV.Rmd
+
+```{r sv_results,fig.height=8,fig.width=12,echo=FALSE}
+
+#four panel plot
+#a) risks by sv groups - AQ
+#b) rates by race - AQ
+#c) risk by sv groups - labor
+#d) rates by race - labor
+
+#AQ
+aq_risks <- aq_sv %>%
+  filter(year==2090, grepl('sv_', svGroupType)) %>%
+  group_by_at(c("svGroupType")) %>%
+  summarize_at(.vars=c("national_highRiskPop_sv","national_highRiskPop_ref",
+                       "impPop_sv","impPop_ref"),sum,na.rm=T) %>%
+  mutate(risk_per = 
+           ((national_highRiskPop_sv/national_highRiskPop_ref) / 
+           (impPop_sv/impPop_ref)) -1) %>%
+  ungroup %>%
+  mutate(across('svGroupType', str_replace, 'sv_minority', 'Minority')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_lowIncome', 'Low Income')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_noHS', 'No High-School\nDiploma')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_plus65', 'Over age 65')) %>%
+  replace(is.na(.),0)
+
+
+aq_rates <- aq_sv %>%
+  filter(year==2090, !grepl('sv_', svGroupType)) %>%
+  group_by_at(c("svGroupType")) %>%
+  summarize_at(.vars=c("aveRate_sv"),sum,na.rm=T) %>%
+  mutate(rate_per = aveRate_sv*1e5) %>% #rates per 100K
+  ungroup %>%
+  mutate(across('svGroupType', str_replace, 'race_amInd', 'American Indian\nor Alaska Native')) %>%
+  mutate(across('svGroupType', str_replace, 'race_asian', 'Asian')) %>%
+  mutate(across('svGroupType', str_replace, 'race_black', 'Black or African\nAmerican')) %>%
+  mutate(across('svGroupType', str_replace, 'race_hispanic', 'Hispanic\nor Latino')) %>%
+  mutate(across('svGroupType', str_replace, 'race_multiRacial', 'Two or more\nraces')) %>%
+  mutate(across('svGroupType', str_replace, 'race_otherRace', 'Other Race')) %>%
+  mutate(across('svGroupType', str_replace, 'race_pacIsl', 'Pacific Islander')) %>%
+  mutate(across('svGroupType', str_replace, 'race_white', 'White, non-\nHispanic')) %>%
+  replace(is.na(.),0)
+
+
+labor_risks <- labor_sv %>%
+  filter(year==2090, grepl('sv_', svGroupType)) %>%
+  group_by_at(c("svGroupType")) %>%
+  summarize_at(.vars=c("national_highRiskPop_sv","national_highRiskPop_ref",
+                       "impPop_sv","impPop_ref"),sum,na.rm=T) %>%
+  mutate(risk_per = 
+           ((national_highRiskPop_sv/national_highRiskPop_ref) / 
+           (impPop_sv/impPop_ref)) -1) %>%
+  mutate(across('svGroupType', str_replace, 'sv_minority', 'Minority')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_lowIncome', 'Low Income')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_noHS', 'No High-School\nDiploma')) %>%
+  mutate(across('svGroupType', str_replace, 'sv_plus65', 'Over age 65')) %>%
+  ungroup %>%
+  replace(is.na(.),0)
+
+labor_rates <- labor_sv %>%
+  filter(year==2090, !grepl('sv_', svGroupType)) %>%
+  group_by_at(c("svGroupType")) %>%
+  summarize_at(.vars=c("aveRate_sv"),sum,na.rm=T) %>%
+  mutate(rate_per = aveRate_sv) %>% #rates per 100K
+  mutate(across('svGroupType', str_replace, 'race_amInd', 'American Indian\nor Alaska Native')) %>%
+  mutate(across('svGroupType', str_replace, 'race_asian', 'Asian')) %>%
+  mutate(across('svGroupType', str_replace, 'race_black', 'Black or African\nAmerican')) %>%
+  mutate(across('svGroupType', str_replace, 'race_hispanic', 'Hispanic\nor Latino')) %>%
+  mutate(across('svGroupType', str_replace, 'race_multiRacial', 'Two or more\nraces')) %>%
+  mutate(across('svGroupType', str_replace, 'race_otherRace', 'Other Race')) %>%
+  mutate(across('svGroupType', str_replace, 'race_pacIsl', 'Pacific Islander')) %>%
+  mutate(across('svGroupType', str_replace, 'race_white', 'White, non-\nHispanic')) %>%
+  ungroup %>%
+  replace(is.na(.),0)
+
+
+#make 4 panel plot of bar charts
+### Iterate over sectors
+#create plot for each sector
+plot_1 <-  aq_risks %>% 
+  mutate(risk_per = risk_per*100) %>%
+  ggplot() +
+  ### bar plot
+  geom_bar(aes(x=reorder(svGroupType, risk_per), y=risk_per),
+           stat="identity",
+           fill=colors_7[6],
+           width = 0.6) +
+  theme_bw() +
+  theme_minimal() +
+  coord_flip()+
+  ### Scales
+  ggtitle("Air Quality:\nMean Difference in Risk Relative to the \nNational Population in 2090") +
+  scale_y_continuous("Percent", 
+                     limits = c(0,50),
+                      breaks = seq(0, 100, by=10)) +
+  scale_x_discrete("Socially-Vulnerable Groups") +
+  scale_fill_manual(values=colors_6[1]) +
+  geom_text(aes(x=reorder(svGroupType, risk_per), 
+                y=risk_per,
+                label=paste0(round(risk_per, 0),"%"), 
+                vjust=0.5,
+                hjust=-1),
+            position = position_dodge(1),
+            color    = 'grey20',
+            size     = 4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size=10),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(vjust=2.5)
+  )
+
+
+##plot2
+plot_2 <-  aq_rates %>% 
+  ggplot() +
+  ### bar plot
+  geom_bar(aes(x=reorder(svGroupType, rate_per), y=rate_per),
+           stat="identity",
+           fill=colors_7[7],
+           width = 0.6) +
+  theme_bw() +
+  theme_minimal() +
+  coord_flip()+
+  ### Scales
+  ggtitle("Air Quality:\nAdditional Mortality in 2090, by Race") +
+  scale_y_continuous("Mortality Rate per 100,000", 
+                     limits = c(0,25),
+                      breaks = seq(0, 25, by=5)) +
+  scale_x_discrete("Race") +
+  geom_text(aes(x=reorder(svGroupType, rate_per), 
+                y=rate_per,
+                label=paste0(round(rate_per, 0)), 
+                vjust=0.5,
+                hjust=-1),
+            position = position_dodge(1),
+            color    = 'grey20',
+            size     = 4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size=10),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(vjust=2.5)
+  )
+
+#plot_2
+
+
+plot_3 <-  labor_risks %>% 
+  mutate(risk_per = risk_per*100) %>%
+  ggplot() +
+  ### bar plot
+  geom_bar(aes(x=reorder(svGroupType, risk_per), y=risk_per),
+           stat="identity",
+           fill=colors_7[6],
+           width = 0.6) +
+  theme_bw() +
+  theme_minimal() +
+  coord_flip()+
+  ### Scales
+  ggtitle("Labor:\nMean Difference in Risk Relative to the \nNational Population in 2090") +
+  scale_y_continuous("Percent", 
+                     limits = c(-10,40),
+                      breaks = seq(-10, 100, by=10)) +
+  scale_x_discrete("Socially-Vulnerable Groups") +
+  geom_text(aes(x=reorder(svGroupType, risk_per), 
+                y=risk_per,
+                label=paste0(round(risk_per, 0),"%"), 
+                vjust=0.5,
+                hjust=-1),
+            position = position_dodge(1),
+            color    = 'grey20',
+            size     = 4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size=10),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(vjust=2.5)
+  )
+
+#plot_3
+
+plot_4 <-  labor_rates %>% 
+  ggplot() +
+  ### bar plot
+  geom_bar(aes(x=reorder(svGroupType, rate_per), y=rate_per),
+           stat="identity",
+           fill=colors_7[7],
+           width = 0.6) +
+  theme_bw() +
+  theme_minimal() +
+  coord_flip()+
+  ### Scales
+  ggtitle("Labor:\nAdditional Hours Lost Per Capita in 2090, by Race") +
+  scale_y_continuous("Labor Hours Lost Per Capita", 
+                     limits = c(0,80),
+                      breaks = seq(0, 80, by=10)) +
+  scale_x_discrete("Race") +
+  geom_text(aes(x=reorder(svGroupType, rate_per), 
+                y=rate_per,
+                label=paste0(round(rate_per, 0)), 
+                vjust=0.5,
+                hjust=-1),
+            position = position_dodge(1),
+            color    = 'grey20',
+            size     = 4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size=10),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(vjust=2.5)
+  )
+
+#plot_4
+
+plot_i <- plot_1 + plot_3 + plot_2 +plot_4
+plot_i <- plot_i + plot_layout(ncol = 2) + plot_layout(heights = c(1,2))#widths = c(1,2))
+plot_i
+#plot_i <- plot_1
+
+
+#plot_i <- plot_i + 
+          plot_annotation(title = "Annual Climate-Driven Impacts",
+                          caption = "")
+  
+plot_i
+
+ggsave(plot = plot_i, filename = 'fa03.tiff',width = 12,height = 8)
+```
+
 
 ## Appendix Figure 4.  
 
@@ -1437,7 +1637,7 @@ p <- ggplot(data = MergedStates,
          y='',
          fill= 'Damages (Billions)')
 
-  ggsave(plot = p, filename = 'fa04.tiff',width = 9,height = 5)
+  ggsave(plot = p, filename = 'fa04_map.tiff',width = 9,height = 5)
   p
   print(df_region_sum %>% 
           mutate(across(c('annual_impacts'), ~ signif(.,2))))
@@ -1639,8 +1839,6 @@ could change to decreasing mean in 2300 or another variable
 
 ```{r annual_bySector_2300,eval=TRUE,fig.height=12,fig.width=9,echo=FALSE}
  plots_annual_bySector <- df_fstat %>%
-   #if plotting 2100 version
-   #filter(year <= 2100) %>%
    #if plotting 2300 version
    filter(year <= 2300 & year > 2100) %>%
    mutate_at(.vars = c('X025','mean','X975'), 
@@ -1674,7 +1872,6 @@ plots_i <-
       ggtitle(str_wrap(sector_j,20)) +
       scale_x_continuous("Year", 
                          breaks = seq(2100, 2300, by=50)) + #2300
-                         #breaks = seq(2020,2100, by =20)) +
       scale_y_continuous("Billions",
                         #"Annual Impacts\n(Billions)",
                          labels=label_scientific(digits = 2)) + 
@@ -1756,7 +1953,7 @@ ggsave(plot = plot_i, filename = 'fa05.tiff',width = 9,height = 12)
 ```
 
 ##Appendix Figure 6 
-SCGHG - Discounting Method Box Plot
+NPD - Discounting Method Box Plot
 
 ```{r FigureA6, fig.height=5, fig.width=7, echo=FALSE}
 
@@ -1764,7 +1961,7 @@ SCGHG - Discounting Method Box Plot
 #data <- scghg_data %>%
 #        mutate(adaptation = 'Default Adaptation')
 
-data <- scghg_data
+data <- npd_data
 
 ##########################
 ######### by discount rate
