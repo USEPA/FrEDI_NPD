@@ -51,8 +51,8 @@ Set paths to files
 ```{r set_paths, include = FALSE}
 ###### Set code paths ######
 ### Path to main folder
-#npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
-npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
+npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
+#npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
 
 ###### Set output paths ######
 #perturb_gas    <- "co2"
@@ -1149,7 +1149,7 @@ could change to decreasing mean in 2300 or another variable
    #filter(year <= 2100) %>%
    #if plotting 2300 version
    filter(year <= 2100 & year > 2020) %>%
-   mutate_at(.vars = c('X025','mean','X975'), 
+   mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
    mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
@@ -1175,6 +1175,10 @@ plots_i <-
       ### Mean Line
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+          ### Median Line
+      geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
       ### Scales
       ggtitle(str_wrap(sector_j,20)) +
