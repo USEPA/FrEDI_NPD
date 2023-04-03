@@ -1151,7 +1151,7 @@ could change to decreasing mean in 2300 or another variable
    filter(year <= 2100 & year > 2020) %>%
    mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, function(x) gsub("ATS Extreme Temperature","Temperature-Related Mortality",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1159,7 +1159,7 @@ sectors_i <- plots_annual_bySector %>%
          filter(year ==2100) %>%
          group_by_at(.vars=c("sector")) %>% 
          summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
-         ungroup %>% arrange(desc(mean), sector)
+         ungroup %>% arrange(desc(mean), sector) 
 
 ### Iterate over sectors
 #create plot for each sector
