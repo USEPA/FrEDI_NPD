@@ -222,6 +222,7 @@ print (signif(df_fstat %>%
         filter(year == 2090) %>%
         mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
         mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
         mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
         summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
 
@@ -586,6 +587,7 @@ units <- 'Billions'
     knitr::opts_chunk$set(fig.width=6,fig.height = 5)
   plot_list[[1]] = p1
   p1
+
   
   p2 <- plots_basicBoxWhisker %>%
     #select remaining sectors
