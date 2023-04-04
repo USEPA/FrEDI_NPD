@@ -1160,7 +1160,10 @@ could change to decreasing mean in 2300 or another variable
    mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
    mutate(sector = sapply(sector, 
-                          function(x) gsub("ATS Extreme Temperature","Temperature-Related Mortality",x))) %>%
+                          function(x) gsub("ATS Extreme Temperature","Temperature Related Mortality",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("High Tide Flooding and Traffic",
+                                           "Transportation Impacts from High Tide Flooding",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1185,7 +1188,7 @@ plots_i <-
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
                 alpha=0.8) +
-          ### Median Line
+      ### Median Line
       geom_line(aes(x=year, y=X50), 
                 linetype = 1, 
                 alpha=0.8) +
@@ -1861,8 +1864,11 @@ could change to decreasing mean in 2300 or another variable
    filter(year <= 2300 & year > 2100) %>%
    mutate_at(.vars = c('X025','X50','mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x)
-   gsub("ATS Extreme Temperature","Temperature-Related Mortality",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("ATS Extreme Temperature","Temperature Related Mortality",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("High Tide Flooding and Traffic",
+                                           "Transportation Impacts from High Tide Flooding",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
