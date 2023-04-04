@@ -51,8 +51,8 @@ Set paths to files
 ```{r set_paths, include = FALSE}
 ###### Set code paths ######
 ### Path to main folder
-#npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
-npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
+npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
+#npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
 
 ###### Set output paths ######
 #perturb_gas    <- "co2"
@@ -1149,9 +1149,9 @@ could change to decreasing mean in 2300 or another variable
    #filter(year <= 2100) %>%
    #if plotting 2300 version
    filter(year <= 2100 & year > 2020) %>%
-   mutate_at(.vars = c('X025','mean','X975'), 
+   mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, function(x) gsub("ATS Extreme Temperature","Temperature-Related Mortality",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1159,7 +1159,7 @@ sectors_i <- plots_annual_bySector %>%
          filter(year ==2100) %>%
          group_by_at(.vars=c("sector")) %>% 
          summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
-         ungroup %>% arrange(desc(mean), sector)
+         ungroup %>% arrange(desc(mean), sector) 
 
 ### Iterate over sectors
 #create plot for each sector
@@ -1175,6 +1175,10 @@ plots_i <-
       ### Mean Line
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+          ### Median Line
+      geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
       ### Scales
       ggtitle(str_wrap(sector_j,20)) +
@@ -1205,6 +1209,7 @@ plots_i <-
 df_j  <- plots_annual_bySector %>% 
         group_by(year) %>%
         summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X50=sum(X50, na.rm=T)/1e3,
                   X025=sum(X025, na.rm=T)/1e3, 
                   X975=sum(X975, na.rm=T)/1e3) %>%
         ungroup()
@@ -1218,6 +1223,10 @@ plot_j  <- df_j %>%
   ### Mean Line
   geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+   ### Median Line
+  geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
   ### Scales
   ggtitle(str_wrap('Total',20)) +
@@ -1841,9 +1850,10 @@ could change to decreasing mean in 2300 or another variable
  plots_annual_bySector <- df_fstat %>%
    #if plotting 2300 version
    filter(year <= 2300 & year > 2100) %>%
-   mutate_at(.vars = c('X025','mean','X975'), 
+   mutate_at(.vars = c('X025','X50','mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, function(x)
+   gsub("ATS Extreme Temperature","Temperature-Related Mortality",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1867,6 +1877,10 @@ plots_i <-
       ### Mean Line
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+         ### Median Line
+      geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
       ### Scales
       ggtitle(str_wrap(sector_j,20)) +
@@ -1896,6 +1910,7 @@ plots_i <-
 df_j  <- plots_annual_bySector %>% 
         group_by(year) %>%
         summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X50 = sum(X50, na.rm = T)/1e3,
                   X025=sum(X025, na.rm=T)/1e3, 
                   X975=sum(X975, na.rm=T)/1e3) %>%
         ungroup()
@@ -1909,6 +1924,10 @@ plot_j  <- df_j %>%
   ### Mean Line
   geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+   ### Median Line
+  geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
   ### Scales
   ggtitle(str_wrap('Total',20)) +
