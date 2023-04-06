@@ -12,7 +12,7 @@
 ## Outputs: output/npd/co2_full_streams_2020_national_default_adaptation.parquet
 ##          output/npd/npd_fredi_national.csv
 ## Written by: US EPA, National Center for Environmental Economics (OP) and Climate Change Division (OAP); December 2022
-## Last updated: 1.4.2023 by B. Parthum
+## Last updated: 4.5.2023 E. McDuffie
 ## NOTES: 
 #####
 
