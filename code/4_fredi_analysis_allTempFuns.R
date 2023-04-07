@@ -205,7 +205,15 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFunScalars.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_Scalars.parquet"))
+  
+  temp <- df_fraw_allnat[df_fraw_allnat$year > 2030,]
+  temp %>%
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2030-2050_constrained_Scalars.parquet"))
+  
+  temp <- df_fraw_allnat[df_fraw_allnat$year <= 2030,]
+  temp %>%
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2030_constrained_Scalars.parquet"))
 } 
 
 # # 1Ba - baseline statistics for each year and sector across all trials (summed across impact types) 
@@ -327,6 +335,14 @@ if (reload ==1){
   ### Save file
   df_fraw_allnat %>%
     write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFunsScalars.parquet"))
+  
+  temp <- df_fraw_allnat[df_fraw_allnat$year > 2075,]
+  temp %>%
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2075_constrained_Scalars.parquet"))
+  
+  temp <- df_fraw_allnat[df_fraw_allnat$year <= 2075,]
+  temp %>%
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2075-2100_constrained_Scalars.parquet"))
 } 
 
 # # 1Bb - baseline statistics for each year and sector across all trials (summed across impact types) 
