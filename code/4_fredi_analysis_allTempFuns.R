@@ -33,7 +33,7 @@ outputsPath  <-  file.path('FrEDI_NPD',"output", "damages","fredi_analysis")
 scghgPath    <-  file.path('FrEDI_NPD',"output","npd_damage_transformation")
 
 ##### Collect Damage Files ####
-c_iteration  <- inputsPath %>% file.path("damages") %>% list.files(pattern = "\\.parquet") %>%
+c_iteration  <- inputsPath  %>% list.files(pattern = "\\.parquet") %>%
   (function(x){sub("\\.parquet", "", x)}) %>%
   (function(x){sub("damages_", "", x)}) %>%
   as.numeric %>% sort; 
@@ -53,7 +53,7 @@ op <- pboptions(type = "timer",char = "=")
 
 ###### National Baseline Data ######
 ##1. Read in all Baseline National Damages (for primary sectors/variants) from all trials
-    #can remove CIL Extreme Temp, Asphalt Roads, and Extreme Temp sectors
+   # Asphalt Roads sector
 # If df is too large...
   # 1a. read in baseline damages, chunked into smaller sets of years
 
@@ -66,18 +66,18 @@ op <- pboptions(type = "timer",char = "=")
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFunScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFunScalars.parquet"))
   
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
       ### File name
       infile_i  <- inputsPath %>%
-        file.path("damages", "damages") %>%
+        file.path("damages") %>%
         paste(c_iteration[i], sep="_") %>%
         paste0(".", "parquet")
       ### Read in data and return
@@ -87,16 +87,17 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year <= 2050) %>%                             #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                !(sector %in% c('Extreme Temperature',
-                            'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                (sector %in% c('Extreme Temperature',
+                            'CIL Extreme Temperature',
+                            'ATS Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType','national_pop','reg_pop'))
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType','national_pop','reg_pop'))
         
         #Could sum across sectors (group by year and trial), then use that total damage value for each year for the transformation (with gdp), 
         #then scale all sectors the GDP dependence in data_i damages, then return data_i
@@ -107,24 +108,91 @@ if (reload ==1){
       ### In future versions, a different multiplier equation should be implemented to capture the actual dependence of each 
       ###  individual sector on GDP and only correct those sectors that have an explict GD dependence. 
       ###################
-      #1. Calculate initial total damages (group by year and trial), D0
-      D0 <- data_i %>%
-        group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
+      # #1. Calculate initial total damages (group by year and trial), D0
+      # D0 <- data_i %>%
+      #   group_by_at(.vars = c("year","trial","gdp_usd")) %>%
+      #   summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
+      # 
+      # #2. calculate scalar using total damage and GDP.  
+      #     #Df = D0/(1+D0/GDP0)
+      #     #multiplier = 1/(1+D0/GDP0)
+      # D0 <- D0 %>%
+      #       mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
       
-      #2. calculate scalar using total damage and GDP.  
-          #Df = D0/(1+D0/GDP0)
-          #multiplier = 1/(1+D0/GDP0)
-      D0 <- D0 %>%
-            mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
+      #constrain damages * calculate multiplier to scale damages, depending on which scenario you're using
+             
+      D0_primary <- data_i %>%
+               filter(!sector %in% c('ATS Extreme Temperature',
+                    'Extreme Temperature','CIL Extreme Temperature')) %>%
+               group_by_at(.vars = c("year","trial","gdp_usd")) %>%
+               summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+               ungroup()%>%
+               select("annual_impacts")
+             
+      D0_ATS_mean <- data_i %>%
+               filter((sector %in% 'ATS Extreme Temperature') & 
+                      (variant %in% c('Mean'))) %>%
+               #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+               mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+               #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+               #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
       
-      #3. then scale all sectors the GDP dependence in data_i damages, ###NOTE -- 
-        #first join the annual multiplier with the original data, second, scale all sectors
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
+      
+      
+      #data_i_scaled <- rbind(D0_elec, D0_rail, D0_roads, D0_coastal, D0_htf)
+               #       data_i_scaled <- data_i_scaled %>%
+               #         select(c("sector","variant","year","trial","damageType","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+               #       ### Return data
+               #       return(data_i_scaled)
+      
+      # #3. then scale all sectors the GDP dependence in data_i damages, ###NOTE -- 
+      #   #first join the annual multiplier with the original data, second, scale all sectors
+      # data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
+      # data_i_scaled <- data_i_scaled %>%
+      #   mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #   mutate(annual_impacts = annual_impacts_scaled) %>%
+      #   select(c("sector","variant","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
         
       #4. then return corrected data
       ### Return data
@@ -137,40 +205,40 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_AllTempFunScalars.parquet"))
 } 
 
-# 1Ba - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_stats_constrained_AllTempFuns.parquet"))
+# # 1Ba - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_stats_constrained_AllTempFuns.parquet"))
 
 
 # 1Ab - baseline damages from 2050-2100 (all years, all trials)
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFunsScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFunsScalars.parquet"))
 
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
       ### File name
       infile_i  <- inputsPath %>%
-        file.path("damages", "damages") %>%
+        file.path("damages") %>%
         paste(c_iteration[i], sep="_") %>%
         paste0(".", "parquet")
       ### Read in data and return
@@ -180,27 +248,75 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year > 2050 & year <= 2100) %>%                             #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                 !(sector %in% c('Extreme Temperature',
-                                 'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType',"reg_pop","national_pop")) 
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType',"reg_pop","national_pop")) 
       #constrain damages  
-      D0 <- data_i %>%
+      D0_primary <- data_i %>%
+        filter(!sector %in% c('ATS Extreme Temperature',
+                              'Extreme Temperature','CIL Extreme Temperature')) %>%
         group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
-      D0 <- D0 %>%
-        mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+        ungroup()%>%
+        select("annual_impacts")
+      
+      D0_ATS_mean <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Mean'))) %>%
+        #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+        mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+      #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
       ### Return data
       return(data_i_scaled)
     }) %>%
@@ -210,33 +326,33 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_constrained_AllTempFunsScalars.parquet"))
 } 
 
-# 1Bb - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_stats_constrained_AllTempFuns.parquet"))
+# # 1Bb - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2050-2100_stats_constrained_AllTempFuns.parquet"))
 
 #***
 ## 1Ac - baseline damages from all impact types (2100-2150, all trials)
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFunsScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFunsScalars.parquet"))
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
@@ -252,27 +368,75 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year > 2100 & year <= 2150) %>%               #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                 !(sector %in% c('Extreme Temperature',
-                                 'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType','reg_pop','national_pop'))
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType','reg_pop','national_pop'))
       #constrain damages  
-      D0 <- data_i %>%
+      D0_primary <- data_i %>%
+        filter(!sector %in% c('ATS Extreme Temperature',
+                              'Extreme Temperature','CIL Extreme Temperature')) %>%
         group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
-      D0 <- D0 %>%
-        mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+        ungroup()%>%
+        select("annual_impacts")
+      
+      D0_ATS_mean <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Mean'))) %>%
+        #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+        mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+      #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
       ### Return data
       return(data_i_scaled)
     }) %>%
@@ -282,22 +446,22 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_constrained_AllTempFunsScalars.parquet"))
 } 
 
-# 1Bc - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_stats_constrained_AllTempFuns.parquet"))
+# # 1Bc - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2100-2150_stats_constrained_AllTempFuns.parquet"))
 
 
 #***
@@ -305,17 +469,17 @@ df_fstat %>%
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFunsScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFunsScalars.parquet"))
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
       ### File name
       infile_i  <- inputsPath %>%
-        file.path("damages", "damages") %>%
+        file.path("damages") %>%
         paste(c_iteration[i], sep="_") %>%
         paste0(".", "parquet")
       ### Read in data and return
@@ -325,27 +489,75 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year > 2150 & year <= 2200) %>%               #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                 !(sector %in% c('Extreme Temperature',
-                                 'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
       #constrain damages  
-      D0 <- data_i %>%
+      D0_primary <- data_i %>%
+        filter(!sector %in% c('ATS Extreme Temperature',
+                              'Extreme Temperature','CIL Extreme Temperature')) %>%
         group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
-      D0 <- D0 %>%
-        mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+        ungroup()%>%
+        select("annual_impacts")
+      
+      D0_ATS_mean <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Mean'))) %>%
+        #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+        mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+      #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
       ### Return data
       return(data_i_scaled)
     }) %>%
@@ -355,22 +567,22 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_constrained_AllTempFunsScalars.parquet"))
 } 
 
-# 1Bd - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_stats_constrained_AllTempFuns.parquet"))
+# # 1Bd - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2150-2200_stats_constrained_AllTempFuns.parquet"))
 
 
 
@@ -378,17 +590,17 @@ df_fstat %>%
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFunsScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFunsScalars.parquet"))
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
       ### File name
       infile_i  <- inputsPath %>%
-        file.path("damages", "damages") %>%
+        file.path("damages") %>%
         paste(c_iteration[i], sep="_") %>%
         paste0(".", "parquet")
       ### Read in data and return
@@ -398,27 +610,75 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year > 2200 & year <= 2250) %>%               #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                 !(sector %in% c('Extreme Temperature',
-                                 'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
       #constrain damages  
-      D0 <- data_i %>%
+      D0_primary <- data_i %>%
+        filter(!sector %in% c('ATS Extreme Temperature',
+                              'Extreme Temperature','CIL Extreme Temperature')) %>%
         group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
-      D0 <- D0 %>%
-        mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+        ungroup()%>%
+        select("annual_impacts")
+      
+      D0_ATS_mean <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Mean'))) %>%
+        #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+        mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+      #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
       ### Return data
       return(data_i_scaled)
     }) %>%
@@ -428,40 +688,40 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_constrained_AllTempFunsScalars.parquet"))
 } 
 
-# 1Be - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_stats_constrained_AllTempFuns.parquet"))
-
+# # 1Be - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2200-2250_stats_constrained_AllTempFuns.parquet"))
+# 
 
 
 #*** 1Af - baseline damages from all impact types (2250-2300, all trials)
 
 # format from the raw data if the data file does not yet exist (or if reload ==0)
 load_raw = 1
-reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFuns.parquet")) 
+reload <- ifelse(file.exists(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFunsScalars.parquet")) 
                  & load_raw ==0,1,0)
 
 if (reload ==1){
-  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFuns.parquet"))
+  df_fraw_allnat <- read_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFunsScalars.parquet"))
 }else{
   df_fraw_allnat <- 
     pblapply(1:length(c_iteration), function(i){
       ### File name
       infile_i  <- inputsPath %>%
-        file.path("damages", "damages") %>%
+        file.path("damages") %>%
         paste(c_iteration[i], sep="_") %>%
         paste0(".", "parquet")
       ### Read in data and return
@@ -471,27 +731,75 @@ if (reload ==1){
         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
         filter(year > 2250 & year <= 2300) %>%               #filter for first part of time series (to minimize df size)
         filter(region =='National Total') %>%                #filter for national region
-        filter((sectorprimary==1) & 
-                 !(sector %in% c('Extreme Temperature',
-                                 'CIL Extreme Temperature'))) %>% #filters for primary variant & sector (but keeps all ExT results)
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
         filter(damageType =='Baseline') %>%                  #selects only baseline case
         # sum across impact type and physical measure (e.g., sums different physical impact types)
         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType","physicalmeasure"))]) %>%
         summarize_at(.vars = c("annual_impacts"), sum, na.rm = TRUE) %>%
         ungroup %>%
-        select(-c('model_type','sectorprimary','variant','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
+        select(-c('model_type','sectorprimary','region','driverType','driverValue','damageType','national_pop','reg_pop')) 
       #constrain damages  
-      D0 <- data_i %>%
+      D0_primary <- data_i %>%
+        filter(!sector %in% c('ATS Extreme Temperature',
+                              'Extreme Temperature','CIL Extreme Temperature')) %>%
         group_by_at(.vars = c("year","trial","gdp_usd")) %>%
-        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE)
-      D0 <- D0 %>%
-        mutate(multiplier = 1/(1+(annual_impacts/gdp_usd)))
-      data_i_scaled <- left_join(data_i, D0 %>% select(multiplier,year,trial), by = c('year','trial'))
-      data_i_scaled <- data_i_scaled %>%
-        mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
-        mutate(annual_impacts = annual_impacts_scaled) %>%
-        select(c("sector","year","trial","annual_impacts","multiplier"))#,"annual_impacts_scaled"))
+        summarize_at(.vars = c("annual_impacts"), sum, na_rm = TRUE) %>%
+        ungroup()%>%
+        select("annual_impacts")
+      
+      D0_ATS_mean <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Mean'))) %>%
+        #mutate(default_diff = annual_impacts - annual_impacts[which(sectorprimary==1)]) %>%
+        mutate(multiplier_ats_mean = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) #%>%
+      #mutate(annual_impacts_scaled = annual_impacts *multiplier)%>%
+      #mutate(annual_impacts = annual_impacts_scaled)
+      D0_ATS_highCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_ats_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      #the multiplier for each scenario is calculated from the sum of damages of all non-temperature sectors + the damages for whichever temperature damage function or variant of interest
+      D0_ATS_lowCI <- data_i %>%
+        filter((sector %in% 'ATS Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_ats_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_med <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Median'))) %>%
+        mutate(multiplier_cil_median = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_highCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('High Confidence Interval'))) %>%
+        mutate(multiplier_cil_highCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_CIL_lowCI <- data_i %>%
+        filter((sector %in% 'CIL Extreme Temperature') & 
+                 (variant %in% c('Low Confidence Interval'))) %>%
+        mutate(multiplier_cil_lowCI = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_Adapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('Adaptation'))) %>%
+        mutate(multiplier_mills_adapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      D0_Mills_NoAdapt <- data_i %>%
+        filter((sector %in% 'Extreme Temperature') & 
+                 (variant %in% c('No Adaptation'))) %>%
+        mutate(multiplier_mills_noadapt = 1/(1+((D0_primary$annual_impacts+annual_impacts)/gdp_usd))) 
+      
+      
+      #don't scale the data here -- just report raw output and the scalars.
+      #i.e., if you want to look at damages using ATS mean, multiply all sectors by the multiplier_ats_mean column
+      data_i_scaled <- left_join(data_i, D0_ATS_mean %>% select(multiplier_ats_mean,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_highCI%>% select(multiplier_ats_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_ATS_lowCI%>% select(multiplier_ats_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_med%>% select(multiplier_cil_median,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_highCI%>% select(multiplier_cil_highCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_CIL_lowCI%>% select(multiplier_cil_lowCI,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_Adapt%>% select(multiplier_mills_adapt,year,trial), by = c('year','trial'))
+      data_i_scaled <- left_join(data_i_scaled, D0_Mills_NoAdapt%>% select(multiplier_mills_noadapt,year,trial), by = c('year','trial'))
+      
       ### Return data
       return(data_i_scaled)
     }) %>%
@@ -501,23 +809,23 @@ if (reload ==1){
     }); df_fraw_allnat %>% glimpse
   ### Save file
   df_fraw_allnat %>%
-    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFuns.parquet"))
+    write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_constrained_AllTempFunsScalars.parquet"))
 } 
 
-# 1Bf - baseline statistics for each year and sector across all trials (summed across impact types) 
-# Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
-df_fstat <- df_fraw_allnat %>%
-  group_by_at(.vars = c('sector','year')) %>%
-  summarize(X025=quantile(annual_impacts,probs=0.025), 
-            X50=quantile(annual_impacts, probs=0.50),
-            X975=quantile(annual_impacts,probs=0.975),
-            X005=quantile(annual_impacts,probs=0.005),
-            X995=quantile(annual_impacts,probs=0.995),
-            mean=mean(annual_impacts)) %>% ungroup
-
-df_fstat %>%
-  write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_stats_constrained_AllTempFuns.parquet"))
-
+# # 1Bf - baseline statistics for each year and sector across all trials (summed across impact types) 
+# # Table 1, Table A1, Figure 2, Figure 3 , Figure A2, A3
+# df_fstat <- df_fraw_allnat %>%
+#   group_by_at(.vars = c('sector','year')) %>%
+#   summarize(X025=quantile(annual_impacts,probs=0.025), 
+#             X50=quantile(annual_impacts, probs=0.50),
+#             X975=quantile(annual_impacts,probs=0.975),
+#             X005=quantile(annual_impacts,probs=0.005),
+#             X995=quantile(annual_impacts,probs=0.995),
+#             mean=mean(annual_impacts)) %>% ungroup
+# 
+# df_fstat %>%
+#   write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2250-2300_stats_constrained_AllTempFuns.parquet"))
+# 
 
 
 
