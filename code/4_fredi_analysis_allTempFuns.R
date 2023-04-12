@@ -207,11 +207,11 @@ if (reload ==1){
   df_fraw_allnat %>%
     write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2050_constrained_Scalars.parquet"))
   
-  temp <- df_fraw_allnat[df_fraw_allnat$year <= 2030,]
+  temp <- df_fraw_allnat[df_fraw_allnat$year > 2030,]
   temp %>%
     write_parquet(outputsPath %>% file.path("baseline_impacts_nat_2030-2050_constrained_Scalars.parquet"))
   
-  temp <- df_fraw_allnat[df_fraw_allnat$year > 2030,]
+  temp <- df_fraw_allnat[df_fraw_allnat$year <= 2030,]
   temp %>%
     write_parquet(outputsPath %>% file.path("baseline_impacts_nat_thru2030_constrained_Scalars.parquet"))
 } 
@@ -1073,53 +1073,56 @@ if (reload ==1){
 # 
 # 
 # 
-# ###### Physical Impacts ######
-# ##4. Physical Impacts (Table 2)
-# 
-# #Physical Impacts for the year 2090
-# load_raw = 1
-# reload <- ifelse(file.exists(outputsPath %>% file.path("phys_impacts_nat_2090_constrained.parquet")) 
-#                  & load_raw ==0,1,0)
-# 
-# if (reload ==1){
-#   df_fraw_phys2090nat <- read_parquet(outputsPath %>% file.path("phys_impacts_nat_2090_constrained.parquet"))
-# }else{
-#   df_fraw_phys2090nat <- 
-#     #pblapply(1:1, function(i){
-#     pblapply(1:length(c_iteration), function(i){
-#       ### File name
-#       infile_i  <- inputsPath %>%
-#         file.path("damages", "damages") %>%
-#         paste(c_iteration[i], sep="_") %>%
-#         paste0(".", "parquet")
-#       ### Read in data and return
-#       data_i    <- infile_i %>% read_parquet
-#       ### Filter data for model type, national total, desired sectors, baseline scenario
-#       data_i    <- data_i   %>% 
-#         filter(model %in% c("Average", "Interpolation")) %>% #filters model type
-#         filter(region =='National Total') %>%                #filter for national region
-#         filter(sectorprimary==1) %>%                         #filters for primary variant
-#         filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
-#         filter(damageType =='Baseline') %>%                  #selects only baseline case
-#         filter(physicalmeasure %in% c('Premature Mortality','Crimes','Hours Lost')) %>% #select only physical measures we want
-#         filter(year==2090) %>%                               #select year 2090 only
-#         # sum across impact type and physical measure (e.g., sums different physical impact types)
-#         group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType"))]) %>%
-#         summarize_at(.vars = c("physical_impacts"), sum, na.rm = TRUE) %>%
-#         ungroup %>%
-#         select(-c('model_type','sectorprimary','variant','region','driverType','driverValue')) %>%
-#         ### Return data
-#         return(data_i)
-#     }) %>%
-#     ### Bind the data together
-#     (function(x){
-#       do.call(rbind, x)
-#     }); df_fraw_phys2090nat %>% glimpse
-#   ### Save file
-#   df_fraw_phys2090nat %>%
-#     write_parquet(outputsPath %>% file.path("phys_impacts_nat_2090_constrained.parquet"))
-# }
-# 
+###### Physical Impacts ######
+##4. Physical Impacts (Table 2)
+
+#Physical Impacts for the year 2090
+load_raw = 1
+reload <- ifelse(file.exists(outputsPath %>% file.path("phys_impacts_nat_2090_constrained_AllTempFuns.parquet"))
+                 & load_raw ==0,1,0)
+
+if (reload ==1){
+  df_fraw_phys2090nat <- read_parquet(outputsPath %>% file.path("phys_impacts_nat_2090_constrained_AllTempFuns.parquet"))
+}else{
+  df_fraw_phys2090nat <-
+    #pblapply(1:1, function(i){
+    pblapply(1:length(c_iteration), function(i){
+      ### File name
+      infile_i  <- inputsPath %>%
+        file.path("damages") %>%
+        paste(c_iteration[i], sep="_") %>%
+        paste0(".", "parquet")
+      ### Read in data and return
+      data_i    <- infile_i %>% read_parquet
+      ### Filter data for model type, national total, desired sectors, baseline scenario
+      data_i    <- data_i   %>%
+        filter(model %in% c("Average", "Interpolation")) %>% #filters model type
+        filter(region =='National Total') %>%                #filter for national region
+        filter((sectorprimary==1) | 
+                 (sector %in% c('Extreme Temperature',
+                                'CIL Extreme Temperature',
+                                'ATS Extreme Temperature'))) %>%
+        filter(!sector %in% excluded_sectors) %>%            #removes sectors not needed
+        filter(damageType =='Baseline') %>%                  #selects only baseline case
+        filter(physicalmeasure %in% c('Premature Mortality','Crimes','Hours Lost')) %>% #select only physical measures we want
+        filter(year==2090) %>%                               #select year 2090 only
+        # sum across impact type and physical measure (e.g., sums different physical impact types)
+        group_by_at(.vars = c_select_rawCols[!(c_select_rawCols %in% c("impactType"))]) %>%
+        summarize_at(.vars = c("physical_impacts"), sum, na.rm = TRUE) %>%
+        ungroup %>%
+        select(-c('model_type','sectorprimary','region','driverType','driverValue')) %>%
+        ### Return data
+        return(data_i)
+    }) %>%
+    ### Bind the data together
+    (function(x){
+      do.call(rbind, x)
+    }); df_fraw_phys2090nat %>% glimpse
+  ### Save file
+  df_fraw_phys2090nat %>%
+    write_parquet(outputsPath %>% file.path("phys_impacts_nat_2090_constrained_AllTempFuns.parquet"))
+}
+
 # # 4B - baseline statistics for 2090 and physical impact sectors across all trials (summed across impact types) 
 # # 
 # df_fstat_2090phys <- df_fraw_phys2090nat %>%
