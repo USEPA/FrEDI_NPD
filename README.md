@@ -1,7 +1,8 @@
 # FrEDI_NPD
 
 This repository includes the input data, analysis scripts, and output data and figures associated with<br>
-Hartin C. et al., (in prep) <em>"Advancing the estimation of future climate impacts within the United States".</em>
+Hartin C. et al., (in discussion) <em>"Advancing the estimation of future climate impacts within the United States".</em>
+https://egusphere.copernicus.org/preprints/2023/egusphere-2023-114/
 
 <strong>Corresponding Author</strong>: Corinne Hartin (hartin.corinne@epa.gov)
 

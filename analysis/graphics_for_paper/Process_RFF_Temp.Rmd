@@ -21,13 +21,14 @@ require(viridis)
 require(rgeos)
 require(maptools)
 require(tidytext)
-sccPath        <- ".." %>% file.path("../"); sccPath %>% list.files
+
+npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files
 #tempPath     <- sccPath %>% file.path("data", "input_files");
-tempPath     <- file.path("data", "input_files"); 
+tempPath     <- npdPath %>% file.path("input", "input_files"); 
 #gdpPath      <- sccPath %>% file.path("data","external");
-gdpPath      <- file.path("data","external");
+gdpPath      <- npdPath %>% file.path("input","external");
 #damagePath     <- sccPath %>% file.path("output", "damages", "rffsp"); 
-damagePath     <- file.path("output", "damages", "rffsp"); 
+damagePath     <- npdPath %>% file.path("output", "damages", "rffsp"); 
 
 #c_iteration  <- damagePath %>% file.path("damages") %>% list.files(pattern = "\\.parquet")
 
@@ -40,7 +41,7 @@ c_iteration  <- tempPath %>% file.path("temp_baseline") %>% list.files(pattern =
 ```{r}
 #temperatures are already relative to 1986-2005 baseline
 
-recalc <- 0
+recalc <- 1
 
 if( recalc ==1 ){
   #load all temperature trial data
@@ -66,11 +67,11 @@ if( recalc ==1 ){
   })
 
   df_rff_temp %>% write.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_temperatures.csv"), 
+                                file.path("figures","rff_eoc_temperatures.csv"), 
                               row.names = FALSE)
 } else {
   df_rff_temp <-  read.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_temperatures.csv"))
+                                file.path("figures", "rff_eoc_temperatures.csv"))
 }
   #read.csv %>%
 ```
@@ -106,12 +107,12 @@ if( recalc ==1 ){
   })
 
 df_rff_pop %>% write.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_population.csv"), 
+                                file.path("figures", "rff_eoc_population.csv"), 
                               row.names = FALSE)
 
 } else {
   df_rff_pop <-  read.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_population.csv"))
+                                file.path("figures", "rff_eoc_population.csv"))
 }
 
 
@@ -131,7 +132,7 @@ pricelevel_2015_to_2020 = 113.784/104.691
 pricelevel_2011_to_2020 = 113.784/98.164  ## rffsps are in 2011$
 pricelevel_2011_to_2015 = 104.691/98.164
 
-recalc <- 1
+recalc <- 0
 
 if( recalc ==1 ){
 
@@ -160,12 +161,12 @@ if( recalc ==1 ){
   })
 
 df_rff_gdp %>% write.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_gdp.csv"), 
+                                file.path("figures", "rff_eoc_gdp.csv"), 
                               row.names = FALSE)
 
 } else {
   df_rff_gdp <-  read.csv(file = damagePath %>% 
-                                file.path("figures", "data", "rff_eoc_gdp.csv"))
+                                file.path("figures", "rff_eoc_gdp.csv"))
 }
 
 df_rff_gdp <- df_rff_gdp %>% 
@@ -340,7 +341,7 @@ timeavg_gr <- df_rff_gdp %>%
   #ungroup() %>%
   #group_by(trial,year) %>%
   #summarize(value = mean(value, na.rm =T)) %>%
-  filter(year > 2020) %>%
+  filter(year >= 2020) %>%
   mutate(value = 100*cummean(ypc.gr)) %>%  #convert to percent
   ungroup()
 
@@ -394,7 +395,11 @@ ggsave(plot = p3, filename = 'FigureA1c.tiff',width = 6,height = 4, bg = 'white'
 #save 2.5th, 97.5th, and mean trajectories
 
 p1 <- p1$data %>%
-  filter(year>=2010)
+  filter(year>=2020)
+
+p2 <- p2$data %>%
+  filter(year>=2020)
+
 
 #variables  <- c('year','temp_025','temp_mean','temp_975',
 #                'pop_025','pop_mean','pop_975',
@@ -403,9 +408,9 @@ year <- p1$year
 temp_025 <- p1$X025
 temp_mean <- p1$mean
 temp_975 <- p1$X975
-pop_025 <- p2$data$X025
-pop_mean <- p2$data$mean
-pop_975 <- p2$data$X975
+pop_025 <- p2$X025
+pop_mean <- p2$mean
+pop_975 <- p2$X975
 gdp_025 <- p3$data$X025
 gdp_mean <- p3$data$mean
 gdp_975 <- p3$data$X975
@@ -419,7 +424,7 @@ stats_traj <- data.frame(year,temp_025,temp_mean,temp_975,
                 gdp_025,gdp_mean,gdp_975)
 
 stats_traj %>% write.csv(file = damagePath %>% 
-                              file.path("figures", "data", "Statistical_Trajectories.csv"), 
+                              file.path("figures", "Statistical_Trajectories.csv"), 
                               row.names = FALSE)
 
 

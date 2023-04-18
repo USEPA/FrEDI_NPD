@@ -222,6 +222,7 @@ print (signif(df_fstat %>%
         filter(year == 2090) %>%
         mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
         mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
         mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
         summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
 
@@ -511,14 +512,15 @@ units <- 'Billions'
   p <- plots_basicBoxWhisker %>%
     #filter for ATS only
     filter(sector %in% c('ATS Extreme Temperature') ) %>%
-    mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+    mutate(sector = sapply(sector,function(x) gsub("ATS Extreme Temperature",
+                                                   "Temperature Related Mortality",x))) %>%
     ggplot(aes(x=reorder(sector,value,mean,na.rm=TRUE),
                y=value,
                fill=category))+
     coord_flip()+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
-                 width=0.8,
+                 width=0.7,
                  alpha=0.6)+
     #stat_summary(fun.y = outliers, 
     #             geom = "point",
@@ -527,8 +529,9 @@ units <- 'Billions'
     stat_summary(fun=mean,geom = "point",
                  shape=23,
                  color='black')+
-    scale_y_continuous(sec.axis=dup_axis(),limits=c(0,10250))+
-    scale_fill_manual(values=rev(colors_6))+  
+    scale_y_continuous(sec.axis=dup_axis(),limits=c(0,10250),labels = scales::comma)+
+    scale_fill_manual(values=rev(colors_6))+ 
+    scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='',
          y=paste0('Damages (',units,')'),
          title= 'U.S. Annual Climate-Driven Damages in 2090',
@@ -542,7 +545,7 @@ units <- 'Billions'
           axis.title.x = element_text(margin = 
                                         margin(t = 5, r = 0, b = 0, l = 0)),
           plot.margin = margin(l=5))+ 
-    guides(fill=guide_legend(title=''))+
+    guides(fill=guide_legend(title=''))
     knitr::opts_chunk$set(fig.width=6,fig.height = 5)
   plot_list[[1]] = p
   p
@@ -552,13 +555,15 @@ units <- 'Billions'
     filter(sector %in% c('Air Quality', 'High Tide Flooding and Traffic',
                           'Labor','Wildfire') ) %>%
     mutate(sector = sapply(sector, function(x) gsub(" and"," &",x))) %>%
+    mutate(sector = sapply(sector,function(x) gsub("High Tide Flooding & Traffic",
+                                                   "Transportation Impacts from High Tide Flooding",x))) %>%
     ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
                y=value,
                fill=category))+
     coord_flip()+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
-                 width=0.8,
+                 width=0.7,
                  alpha=0.6)+
     #stat_summary(fun.y = outliers, 
     #             geom = "point",
@@ -569,6 +574,7 @@ units <- 'Billions'
                  color='black')+
     scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,1125))+
     scale_fill_manual(values=rev(colors_6))+
+    scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='',
          y=paste0('Damages (',units,')'),
          title= 'Climate-Driven Damages in 2090',
@@ -582,10 +588,11 @@ units <- 'Billions'
           axis.title.x = element_text(margin = 
                                         margin(t = 5, r = 0, b = 0, l = 0)),
           plot.margin = margin(l=5))+ 
-    guides(fill=guide_legend(title=''))+
+    guides(fill=guide_legend(title=''))
     knitr::opts_chunk$set(fig.width=6,fig.height = 5)
   plot_list[[1]] = p1
   p1
+
   
   p2 <- plots_basicBoxWhisker %>%
     #select remaining sectors
@@ -598,13 +605,15 @@ units <- 'Billions'
     mutate(sector = sapply(sector, 
                            function(x) gsub("Transmission","Trans.",x))) %>%
     mutate(sector = sapply(sector, function(x) gsub(" and"," &",x))) %>%
+    mutate(sector = sapply(sector, function(x) gsub("CIL","",x))) %>%
+    mutate(sector = sapply(sector, function(x) gsub("Electricity","Elec.",x))) %>%
     ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
                y=value,
                fill=category))+
     coord_flip()+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
-                 width = 0.8,
+                 width = 0.7,
                  alpha=0.6)+
     #stat_summary(fun.y = outliers, 
     #             geom = "point",
@@ -614,6 +623,7 @@ units <- 'Billions'
                  shape=23,
                  color='black')+
     scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,100))+
+    scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='', 
          y=paste0('Damages (',units,')'),
          title= 'U.S. Annual Climate-Driven Damages in 2090',
@@ -634,10 +644,10 @@ units <- 'Billions'
   
   
   #Option B is commented out
-    ggsave(plot = p, filename = 'Figure3a(2).tiff',width = 6.5,height = 1.65, bg = 'white')
-    ggsave(plot = p1, filename = 'Figure3b(2).tiff',width = 7,height = 2.25,bg = 'white')
+    ggsave(plot = p, filename = 'Figure3a(2).tiff',width = 6.75,height = 1.65, bg = 'white')
+    ggsave(plot = p1, filename = 'Figure3b(2).tiff',width = 7,height = 2.5,bg = 'white')
     #ggsave(plot = p2, filename = 'Figure3lgnd.tiff',width = 6.8,height = 3.5)
-    ggsave(plot = p2, filename = 'Figure3c(2).tiff',width = 7,height = 4,bg = 'white')
+    ggsave(plot = p2, filename = 'Figure3c(2).tiff',width = 7,height = 4.75,bg = 'white')
     
     
 ```
@@ -1085,7 +1095,7 @@ p <- plot.data %>%
                show.legend=F) +
   geom_text(data=means, 
             aes(x=means, y=discount.rate, group=discount.rate, 
-                label=paste0('$', round(means, 2)), vjust=-1.5),
+                label=paste0('$', round(means, 2)), vjust=-2),
             position = position_dodge(1.3),
             color    = 'grey20',
             size     = 4,
@@ -1149,9 +1159,13 @@ could change to decreasing mean in 2300 or another variable
    #filter(year <= 2100) %>%
    #if plotting 2300 version
    filter(year <= 2100 & year > 2020) %>%
-   mutate_at(.vars = c('X025','mean','X975'), 
+   mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("ATS Extreme Temperature","Temperature Related Mortality",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("High Tide Flooding and Traffic",
+                                           "Transportation Impacts from High Tide Flooding",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1159,7 +1173,7 @@ sectors_i <- plots_annual_bySector %>%
          filter(year ==2100) %>%
          group_by_at(.vars=c("sector")) %>% 
          summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
-         ungroup %>% arrange(desc(mean), sector)
+         ungroup %>% arrange(desc(mean), sector) 
 
 ### Iterate over sectors
 #create plot for each sector
@@ -1175,6 +1189,10 @@ plots_i <-
       ### Mean Line
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+      ### Median Line
+      geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
       ### Scales
       ggtitle(str_wrap(sector_j,20)) +
@@ -1205,6 +1223,7 @@ plots_i <-
 df_j  <- plots_annual_bySector %>% 
         group_by(year) %>%
         summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X50=sum(X50, na.rm=T)/1e3,
                   X025=sum(X025, na.rm=T)/1e3, 
                   X975=sum(X975, na.rm=T)/1e3) %>%
         ungroup()
@@ -1218,6 +1237,10 @@ plot_j  <- df_j %>%
   ### Mean Line
   geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+   ### Median Line
+  geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
   ### Scales
   ggtitle(str_wrap('Total',20)) +
@@ -1841,9 +1864,13 @@ could change to decreasing mean in 2300 or another variable
  plots_annual_bySector <- df_fstat %>%
    #if plotting 2300 version
    filter(year <= 2300 & year > 2100) %>%
-   mutate_at(.vars = c('X025','mean','X975'), 
+   mutate_at(.vars = c('X025','X50','mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
-   mutate(sector = sapply(sector, function(x) gsub("ATS","",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("ATS Extreme Temperature","Temperature Related Mortality",x))) %>%
+   mutate(sector = sapply(sector, 
+                          function(x) gsub("High Tide Flooding and Traffic",
+                                           "Transportation Impacts from High Tide Flooding",x))) %>%
    mutate(sector = sapply(sector, function(x) gsub("CIL","",x)))
 
 #order sectors by decreasing mean in 2090  
@@ -1867,6 +1894,10 @@ plots_i <-
       ### Mean Line
       geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+         ### Median Line
+      geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
       ### Scales
       ggtitle(str_wrap(sector_j,20)) +
@@ -1896,6 +1927,7 @@ plots_i <-
 df_j  <- plots_annual_bySector %>% 
         group_by(year) %>%
         summarize(mean = sum(mean, na.rm=T)/1e3,
+                  X50 = sum(X50, na.rm = T)/1e3,
                   X025=sum(X025, na.rm=T)/1e3, 
                   X975=sum(X975, na.rm=T)/1e3) %>%
         ungroup()
@@ -1909,6 +1941,10 @@ plot_j  <- df_j %>%
   ### Mean Line
   geom_line(aes(x=year, y=mean), 
                 linetype = 2, 
+                alpha=0.8) +
+   ### Median Line
+  geom_line(aes(x=year, y=X50), 
+                linetype = 1, 
                 alpha=0.8) +
   ### Scales
   ggtitle(str_wrap('Total',20)) +
