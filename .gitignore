@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+*_constrained_AllTempFunScalars.parquet
+*co2_full_streams_2020_national_detault*
+./output/damages/rffsp/damages_*
