@@ -243,7 +243,7 @@ for (GAS in c('co2')) {
           mutate(adaptation = ADAPT)
       )
 }
-
+}
 ## export summary stats
 means %>% 
   write_csv(paste0('output/npd_damage_transformation/npd.csv'))
