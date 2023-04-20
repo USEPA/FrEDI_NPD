@@ -48,21 +48,23 @@ options(scipen = 9999999)
 ##############  data paths
 ##########################
 
-external_path = file.path('..','data','external')
-fredi_input_path = file.path('..','data','input_files')
+external_path = file.path('input/external')
+fredi_input_path = file.path('input/input_files')
 
 ##########################
 ####################  data
 ##########################
 
 ## read rffsps for us
-rffsp <- external_path %>% 
+rffsp =
+  external_path %>% 
   file.path('rffsp_usa.csv') %>%
   read_csv %>%
   rename(gdp_usd = gdp)
 
 ## final sample randomly selected in MimiGIVE
-rffsp_sample = external_path %>%
+rffsp_sample = 
+  external_path %>%
   file.path('rffsp_fair_sequence.csv') %>%
   read_csv %>% 
   select(-fair.id)
@@ -73,23 +75,24 @@ rffsp_sample = external_path %>%
 
 ## parallel filter and writing of feather files
 parallel::detectCores()
-n.cores <- parallel::detectCores() - 1
+n.cores = parallel::detectCores() - 1
 #n.cores <- 1
 
 ## make cluster
-my.cluster <- parallel::makeCluster(
-  n.cores, 
-  type = "PSOCK"
-)
+my.cluster =
+  parallel::makeCluster(
+    n.cores, 
+    type = "PSOCK"
+  )
 
 ## register it to be used by %dopar%
 doParallel::registerDoParallel(cl = my.cluster)
 
-## check if it is registered (optional)
-foreach::getDoParRegistered()
-
-## how many workers are available? (optional)
-foreach::getDoParWorkers()
+# ## check if it is registered (optional)
+# foreach::getDoParRegistered()
+# 
+# ## how many workers are available? (optional)
+# foreach::getDoParWorkers()
 
 ###### Iteration List ######
 jList <- 1:1e4
@@ -98,7 +101,8 @@ jList <- 1:1e4
 ##########################
 ##############  population
 ##########################
-pop = rffsp %>% 
+pop = 
+  rffsp %>% 
   select(rffsp.id, year, pop) %>% 
   right_join(rffsp_sample) %>% 
   arrange(trial,year) %>% 
@@ -107,20 +111,23 @@ pop = rffsp %>%
 
 ## fredi default scenarios population
 # fredi_scenario_pop = read_excel('data/external/20210923_ciraTempBinData.xlsx', sheet = 'defaultScenario', range = 'C3:K20')
-fredi_scenario_pop = external_path %>%
+fredi_scenario_pop = 
+  external_path %>%
   file.path('20220701_FrEDI_config.xlsx') %>%
   read_excel(sheet = 'defaultScenario', range = 'C3:K20')
 
 ## add 2010 and 2015 fredi populations to rff-sps 
-pop = bind_rows(pop,
-                fredi_scenario_pop %>% filter(year %in% c(2010, 2015)) %>% 
-                  summarise(pop = rowSums(select(., starts_with("pop_")))) %>% 
-                  mutate(year = c(2010, 2015)) %>% 
-                  crossing(rffsp_sample)) %>% 
+pop = 
+  bind_rows(pop,
+            fredi_scenario_pop %>% filter(year %in% c(2010, 2015)) %>% 
+              summarise(pop = rowSums(select(., starts_with("pop_")))) %>% 
+              mutate(year = c(2010, 2015)) %>% 
+              crossing(rffsp_sample)) %>% 
   arrange(trial, year)    
 
 ## get regional proportions
-pop_proportions = fredi_scenario_pop %>% 
+pop_proportions = 
+  fredi_scenario_pop %>% 
   mutate(total = rowSums(select(., starts_with("pop_"))),
          Northern.Plains.prop = pop_Northern.Plains/total,
          Southern.Plains.prop = pop_Southern.Plains/total,
@@ -134,7 +141,8 @@ pop_proportions = fredi_scenario_pop %>%
   fill(-year)
 
 ## create regional pop from rffsps
-pop_regional = pop %>% 
+pop_regional = 
+  pop %>% 
   left_join(pop_proportions) %>% 
   mutate(`Northern Plains` = pop * Northern.Plains.prop,
          `Southern Plains` = pop * Southern.Plains.prop,
@@ -165,12 +173,14 @@ foreach(j = jList, .packages=c('tidyverse')) %dopar% {
 pricelevel_2011_to_2015 = 104.691/98.164
 
 ## fredi default scenarios population
-fredi_scenario_gdp = external_path %>%
+fredi_scenario_gdp = 
+  external_path %>%
   file.path('20220701_FrEDI_config.xlsx') %>%
   read_excel(sheet = 'defaultScenario', range = 'C3:D20')
 
 ## compile gdp data
-gdp = rffsp %>% 
+gdp = 
+  rffsp %>% 
   select(rffsp.id, year, gdp_usd, dollar.year) %>% 
   right_join(rffsp_sample) %>% 
   arrange(trial, year) %>% 
@@ -180,11 +190,12 @@ gdp = rffsp %>%
   relocate(trial, rffsp.id, year)
 
 ## add 2010 and 2015 fredi populations to rff-sps 
-gdp = bind_rows(gdp,
-                fredi_scenario_gdp %>% 
-                  filter(year %in% c(2010, 2015)) %>% 
-                  mutate(dollar.year = 2015) %>% 
-                  crossing(rffsp_sample)) %>% 
+gdp = 
+  bind_rows(gdp,
+            fredi_scenario_gdp %>% 
+              filter(year %in% c(2010, 2015)) %>% 
+              mutate(dollar.year = 2015) %>% 
+              crossing(rffsp_sample)) %>% 
   arrange(trial, year)
 
 ## export as inputs to fredi
@@ -203,18 +214,19 @@ foreach(j = jList, .packages=c('tidyverse')) %dopar% {
 #############  temperature
 ##########################
 
-## [eem: is this comment still true??] note, these temperature files are too large for the repo. We can consider how to include the raw output from MimiGIVE later. For now, we can just store the input-ready data. 
 ## the following processing script can be applied to any baseline and perturbed temperature output from MimiGIVE to prepare it for FrEDI
 
 ## baseline temperature 
-temp = external_path %>%
+temp = 
+  external_path %>%
   file.path('temperature','temperature-CO2-RFF-2020-n10000','results','model_1','TempNorm_1850to1900_global_temperature_norm.parquet') %>%
   read_parquet %>% 
   rename(year=time, temp_C_global=2, trial=trialnum) %>% 
   filter(year > 1985)
 
 ## recover 1986 to 2005 mean to scale for fredi
-temp.relative.baseline = temp %>% 
+temp.relative.baseline = 
+  temp %>% 
   filter(year %in% seq(1986, 2005, 1)) %>% 
   group_by(trial) %>% 
   summarise(base.1986.2005 = mean(temp_C_global)) %>% 
@@ -233,47 +245,53 @@ temp %>%
   write_parquet(fredi_input_path %>% file.path('global_mean_surface_temperature_baseline.parquet'))
 
 ## export scenario-specific files to read into fredi
-
 foreach(j = jList, .packages=c('tidyverse')) %dopar% {
   temp %>% 
     filter(trial==j) %>% 
     select(year, temp_C_global) %>% 
-    write_csv(fredi_input_path %>% file.path('temp_baseline',paste0('temp_baseline_', j, '.csv')))
+    write_csv(fredi_input_path %>% file.path('temp_baseline', paste0('temp_baseline_', j, '.csv')))
 }
 
 ## repeat with each temperature path from the perturbed emissions for each gas
-for (GAS in c('co2')) {
+for (GAS in c('co2', 'ch4', 'n2o')) {
   for (YEAR in c(2020))
     
     ## perturbed temperature path
-    temp <- external_path %>%
-      file.path('temperature',paste0('temperature-', toupper(GAS), '-RFF-', YEAR, '-n10000'),
-                'results','model_2','TempNorm_1850to1900_global_temperature_norm.parquet') %>%
-      read_parquet( show_col_types = FALSE) %>% 
-      rename(year=time, temp_C_global=2, trial=trialnum) %>% 
+    temp =
+      external_path %>%
+      file.path('temperature', paste0('temperature-', toupper(GAS), '-RFF-', YEAR, '-n10000'),
+                'results', 'model_2', 'TempNorm_1850to1900_global_temperature_norm.parquet') %>%
+      read_parquet %>% 
+      rename(year          = time, 
+             temp_C_global = 2, 
+             trial         = trialnum) %>% 
       filter(year > 1985)
   
   ## rescale temp and trim for fredi
-  temp %<>% left_join(temp.relative.baseline) %>% 
+  temp %<>% 
+    left_join(temp.relative.baseline) %>% 
     mutate(temp_C_global = temp_C_global - base.1986.2005) %>% 
     filter(year %in% seq(2000, 2300, 1)) %>%
     select(-base.1986.2005) %>% 
-    left_join(rffsp_sample, show_col_types = FALSE) %>% 
+    left_join(rffsp_sample) %>% 
     relocate(trial, rffsp.id, year)
   
-  # ## export as inputs to fredi
-  temp %>% write_parquet(fredi_input_path %>% file.path(paste0('global_mean_surface_temperature_perturbed_', GAS, '_', YEAR, '.parquet')))
+  ## export as inputs to fredi
+  temp %>% 
+    write_parquet(fredi_input_path %>% 
+                           file.path(paste0('global_mean_surface_temperature_perturbed_', GAS, '_', YEAR, '.parquet')))
   
   ## export scenario-specific files to read into fredi
   foreach(j = jList, .packages=c('tidyverse')) %dopar% {
     temp %>% 
-      filter(trial==j) %>% 
+      filter(trial == j) %>% 
       select(year, temp_C_global) %>% 
-      write_csv(fredi_input_path %>% file.path('temp_perturbed',paste0(GAS, '/temp_perturbed_', GAS, '_', YEAR, '_', j, '.csv')))
+      write_csv(fredi_input_path %>% 
+                  file.path('temp_perturbed', paste0(GAS, '/temp_perturbed_', GAS, '_', YEAR, '_', j, '.csv')))
   }
 }
 
 ## stop cluster
 parallel::stopCluster(cl = my.cluster)
 
-## END OF SCRIPT. Have a great day!
+## end of script, have a great day!
