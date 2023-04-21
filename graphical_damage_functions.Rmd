@@ -1,0 +1,62 @@
+---
+title: "FrEDI damage function"
+author: "CH"
+date: "2023-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Description
+
+Here we are attempting to pull out the graphical representation of the underlying damage functions within FrEDI.
+
+### Steps
+
+1.  Set GDP to constant 2020 values (all regions have same GDP)
+2.  Set population to constant 2020 values (populations in regions differ)
+3.  Temperature trajectory used for SV (mean RFF)
+4.  Run FrEDI - main branch
+5.  Plot damages versus temperature
+
+#### Load Data
+
+```{r load data}
+library(FrEDI)
+
+popInputFile <- "/input/pop_scenario_for_damagefunct.csv"
+gdpInputFile <- "/input/gdp_scenario_for_damagefunct.csv"
+tempInputFile <-"./data/input_files/temp_baseline/temp_baseline_8653.csv" #already formatted to 1986-2005
+
+inputs <- import_inputs(tempfile = tempInputFile, temptype = "global", 
+                        popfile = popInputFile, popform = "wide",
+                        gdpfile = gdpInputFile)
+```
+
+#### Run FrEDI
+
+```{r run fredi}
+df <- run_fredi(inputsList= inputs,  aggLevels="all") 
+# i want all sectors, all adapat options, model average
+
+damages <- df %>% 
+  filter(region == "National Total") %>% 
+  filter(model %in% c("Average", "Interpolation")) %>% 
+  select(c("sector", "variant","year", "annual_impacts", "driverValue")) %>% 
+  mutate(annual_impacts = annual_impacts/10e9)
+```
+
+## Plots up some damage functions
+
+```{r plots, echo=FALSE}
+p <- ggplot(damages, aes(driverValue, annual_impacts, color = variant)) +
+  geom_line() +
+  facet_wrap(~sector, scales = "free")+
+  theme_minimal()+
+  ggtitle ("Annual damages ($Billions rel 1986-2005) from FrEDI as a result of temperature or SLR, holding gdp and pop constant")
+
+p
+
+```
