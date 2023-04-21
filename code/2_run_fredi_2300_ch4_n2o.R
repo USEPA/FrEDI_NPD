@@ -10,7 +10,6 @@
 ##          output/damages/rffsp/trials.csv
 ## Outputs: output/damages/rffsp/damages_[scenario].parquet
 ## Written by: US EPA, National Center for Environmental Economics (OP) and Climate Change Division (OAP); January 2022
-### Edited 2022.09.13
 ### 2.4 hours for 200 runs
 ### 3.8 hours for 400 runs CH 11/07/2022 
 #### 200 baseline and 200 perturbed
@@ -28,7 +27,7 @@ rm(list = ls()); gc()
 library("devtools")
 #branch = 'thru2300'
 branch = 'FrEDI_2300' #tagged version for Hartin paper
-inst_flag = TRUE
+inst_flag = FALSE
 
 if ( inst_flag == TRUE){
   remove.packages('FrEDI')
@@ -50,7 +49,8 @@ require(FrEDI)
 
 ###### Set Paths ######
 inputsPath   <- "." %>% file.path("input", "input_files")
-perturb_gas  <- c("CH4","N2O")
+perturb_gas  <- c("ch4","n2o")
+#perturb_gas  <- c("ch4")
 perturb_year <- 2020
 outputsPath  <- "." %>% file.path("output", "damages", "rffsp")
 
@@ -203,6 +203,8 @@ c_joinCols       <- c("sector", "variant", "impactYear", "impactType", "region",
 
 ###### Set Runs ######
 c_runs          <- 1:1e4
+#c_runs <- 9520
+
 ### Get a random sample of 1000 runs
 ### Sample of 10 takes 3.7 minutes (~37 seconds/run)
 # c_runs1   <- sample(x=c_runs, size=n_samples); c_runs1 %>% head
@@ -218,7 +220,7 @@ c_runs0 <- outputsPath
 c_runs0 %>% length
 # c_runs0 <- (outputsPath %>% file.path("trials.csv") %>% read.csv)$trial %>% sort
 ### Number of samples
-n_samples <- 1e4
+n_samples <- 1#1e4
 # c_runs1   <- c_runs0; c_runs1 %>% head; c_runs1 %>% length
 c_runs1   <- c_runs0 %>% c(sample(
   x    = c_runs[!(c_runs %in% c_runs0)],

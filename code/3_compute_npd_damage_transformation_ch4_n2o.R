@@ -5,8 +5,8 @@
 ##          1.5%, 2%, 2.5%, and 3% Ramsey discounting and a 2% and 3% constant discount rate
 ##          by 2300 in 2020 USD (marginal = perturbed - baseline).
 ##          - FrEDI annual damages are converted from 2015$ to 2020$
-## Inputs:  data/external/rffsp_usa.csv
-##          data/external/rffsp_fair_sequence.csv
+## Inputs:  input/external/rffsp_usa.csv
+##          input/external/rffsp_fair_sequence.csv
 ##          output/damages/rffsp/damages/damages_[scenario].parquet
 ## Outputs: output/npd/ch4_full_streams_2020_national_default_adaptation.parquet
 ##          output/npd/n2o_full_streams_2020_national_default_adaptation.parquet
@@ -69,8 +69,8 @@ read_fredi =
                 damages.perturbed = sum(damages.perturbed) * pricelevel_2015_to_2020,
                 .groups = 'drop') %>% 
       mutate(damages.marginal = case_when(GAS == 'co2' ~ (damages.perturbed - damages.baseline) * (12/44) * (1e-9), #convert FaIR's GtC --> tCO2
-                                          GAS == 'CH4' ~ (damages.perturbed - damages.baseline) * (16/16) * (1e-6), #convert FaIR's MtCH4 --> tCH4
-                                          GAS == 'N2O' ~ (damages.perturbed - damages.baseline) * (28/44) * (1e-6)), #convert FaIR's MtN2 --> tN2O
+                                          GAS == 'ch4' ~ (damages.perturbed - damages.baseline) * (16/16) * (1e-6), #convert FaIR's MtCH4 --> tCH4
+                                          GAS == 'n2o' ~ (damages.perturbed - damages.baseline) * (28/44) * (1e-6)), #convert FaIR's MtN2 --> tN2O
              emissions.year   = YEAR,
              gas              = GAS)
   }
@@ -86,13 +86,13 @@ pricelevel_2015_to_2020 = 113.648/104.691 ## fredi is in 2015$
 ## read rffsps for us
 ## rffsp_fair_sequence includes the cross-walk between trial, rffsp ID, and fair ID
 rffsp = 
-  read_csv('data/external/rffsp_usa.csv') %>% 
+  read_csv('input/external/rffsp_usa.csv') %>% 
   select(rffsp.id, year, pop, gdp) %>% 
   group_by(rffsp.id) %>%
   complete(year = seq(first(year), last(year))) %>% 
   mutate(pop = exp(na.approx(log(pop))) * 1e3,
          gdp = exp(na.approx(log(gdp))) * pricelevel_2011_to_2020 * 1e6) %>% 
-  right_join(read_csv('data/external/rffsp_fair_sequence.csv') %>% 
+  right_join(read_csv('input/external/rffsp_fair_sequence.csv') %>% 
                select(trial, rffsp.id),
              by = 'rffsp.id') %>% 
   arrange(trial, year)
@@ -107,7 +107,8 @@ time1 = Sys.time()
 ## object to store data
 means = tibble()
 
-perturb_gas  <- c("CH4","N2O")
+perturb_gas  <- c("ch4","n2o")
+#perturb_gas  <- c("ch4")
 
 for (GAS in perturb_gas) {
   for (YEAR in c(2020)) {
@@ -137,8 +138,8 @@ for (GAS in perturb_gas) {
              damages.baseline      = gdp * damages.baseline.pct,
              damages.perturbed     = gdp * damages.perturbed.pct,
              damages.marginal      = case_when(GAS == 'co2' ~ (damages.perturbed - damages.baseline) * (12/44) * (1e-9), #convert FaIR's GtC --> tCO2
-                                               GAS == 'CH4' ~ (damages.perturbed - damages.baseline) * (16/16) * (1e-6), #convert FaIR's MtCH4 --> tCH4
-                                               GAS == 'N2O' ~ (damages.perturbed - damages.baseline) * (28/44) * (1e-6))) %>% #convert FaIR's MtN2 --> tN2O
+                                               GAS == 'ch4' ~ (damages.perturbed - damages.baseline) * (16/16) * (1e-6), #convert FaIR's MtCH4 --> tCH4 so $/ton CH4
+                                               GAS == 'n2o' ~ (damages.perturbed - damages.baseline) * (28/44) * (1e-6))) %>% #convert FaIR's MtN2 --> tN2O so $ per ton N2O
       ungroup()
     
     ## test damage transformation
@@ -166,7 +167,7 @@ for (GAS in perturb_gas) {
            caption = 'Note: Sample from all 10,000 trials. Mean (solid) and median (dashed) lines shown along with 5th-95th percentile bounds.') +
       theme_bw()
     
-    ggsave('output/npd_damage_transformation/difference_between_direct_and_proportional_damages.svg', width = 9, height = 6) 
+    ggsave(paste0('output/npd_damage_transformation/difference_between_direct_and_proportional_damages_',GAS,'.svg'), width = 9, height = 6) 
     
     dif %>%
       ggplot() +
@@ -181,7 +182,7 @@ for (GAS in perturb_gas) {
            caption = 'Note: Sample from all 10,000 trials. Mean (solid) and median (dashed) lines shown along with 5th-95th percentile bounds.') +
       theme_bw()
     
-    ggsave('output/npd_damage_transformation/difference_between_direct_and_proportional_damages_pct.svg', width = 9, height = 6) 
+    ggsave(paste0('output/npd_damage_transformation/difference_between_direct_and_proportional_damages_pct_',GAS,'.svg'), width = 9, height = 6) 
     
     ## discount rates
     rates = tibble(rate = c('1.5% Ramsey', '2.0% Ramsey', '2.5% Ramsey', '3.0% Ramsey', '2.0% CDR', '3.0% CDR'),
@@ -203,6 +204,8 @@ for (GAS in perturb_gas) {
       eta  = rates$eta[[RATE]]
       
       ## get streams of discounted damages and net present damages
+      ## Note - this method to calculate the discount rate maintains the calculation for
+      ## discrete instead of continuous time
       data = 
         bind_rows(
           data,
@@ -212,9 +215,9 @@ for (GAS in perturb_gas) {
                    discount.factor             = case_when(grepl("Ramsey", rate) ~ (base.ypc/ypc)^eta/(1+rho)^(year-emissions.year),
                                                            T ~ 1/(1+rho)^(year-emissions.year)),
                    damages.marginal.discounted = damages.marginal * discount.factor,
-                   npd                       = sum(damages.marginal.discounted, na.rm = F),
-                   damages.baseline.discounted = damages.baseline * discount.factor,
-                   npd                         = sum(damages.baseline.discounted, na.rm = F)) %>% 
+                   npd                       = sum(damages.marginal.discounted, na.rm = F))%>% #,
+                   #damages.baseline.discounted = damages.baseline * discount.factor,
+                   #npd                         = sum(damages.baseline.discounted, na.rm = F)) %>% 
             ungroup()
         )
     }
@@ -253,7 +256,7 @@ for (GAS in perturb_gas) {
 }
 ## export summary stats
 means %>% 
-  write_csv(paste0('output/npd_damage_transformation/npd.csv'))
+  write_csv(paste0('output/npd_damage_transformation/mean_ch4_n2o_npd.csv'))
 
 ### stop the clock
 time2 = Sys.time()
