@@ -1,7 +1,8 @@
 #####
 ## Title:   5_fredi_analysis.R
 ## Purpose: This file will read all FrEDI output files and generate aggregate dataframes
-##          for use in the scc graphics script. THis code includes all temperature mortality damage functions
+##          for use in the Hartin et al., 2023 graphics script. 
+##          This code includes the processing of all all temperature mortality damage functions
 ##          
 ## Inputs:  output/damages/rffsp/damages_[scenario].parquet
 ## Outputs: output/damages/rffsp/damages_[scenario].parquet
@@ -23,13 +24,8 @@ require(dplyr);
 
 
 ###### Set Paths ######
-#eem (b/c I don't have permission to open SCC_FrEDI.Rproj)
-setwd("/home/emcduf01/shared/OAR/OAP/CCD/CSIB/FrEDI_NPD_2023/")
 inputsPath   <-  file.path('FrEDI_rawDamages_01272023',"damages") #OG damage files copied from ncee shared folder
 outputsPath  <-  file.path('FrEDI_NPD',"output", "damages","fredi_analysis")
-#original scghg
-#scghgPath    <- "." %>% file.path("output","scghg")
-##transformed scghg path (updated 1/5/23)
 scghgPath    <-  file.path('FrEDI_NPD',"output","npd_damage_transformation")
 
 ##### Collect Damage Files ####

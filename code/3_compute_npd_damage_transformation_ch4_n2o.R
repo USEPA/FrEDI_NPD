@@ -5,6 +5,7 @@
 ##          1.5%, 2%, 2.5%, and 3% Ramsey discounting and a 2% and 3% constant discount rate
 ##          by 2300 in 2020 USD (marginal = perturbed - baseline).
 ##          - FrEDI annual damages are converted from 2015$ to 2020$
+##          - computes results for N2O and CH4 pulses
 ## Inputs:  input/external/rffsp_usa.csv
 ##          input/external/rffsp_fair_sequence.csv
 ##          output/damages/rffsp/damages/damages_[scenario].parquet
@@ -215,9 +216,7 @@ for (GAS in perturb_gas) {
                    discount.factor             = case_when(grepl("Ramsey", rate) ~ (base.ypc/ypc)^eta/(1+rho)^(year-emissions.year),
                                                            T ~ 1/(1+rho)^(year-emissions.year)),
                    damages.marginal.discounted = damages.marginal * discount.factor,
-                   npd                       = sum(damages.marginal.discounted, na.rm = F))%>% #,
-                   #damages.baseline.discounted = damages.baseline * discount.factor,
-                   #npd                         = sum(damages.baseline.discounted, na.rm = F)) %>% 
+                   npd                       = sum(damages.marginal.discounted, na.rm = F))%>% 
             ungroup()
         )
     }

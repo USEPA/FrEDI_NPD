@@ -1,6 +1,6 @@
 ---
-title: "Figures for FrEDI NPD Paper"
-author: "CH, EM"
+title: "Figures for Hartin et al., Paper"
+author: "U.S. EPA OAP - CH, EM"
 use:    "Contains figures for FrEDI NPD paper"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -53,13 +53,6 @@ Set paths to files
 ### Path to main folder
 #npdPath        <- ".." %>% file.path("../GitHub/FrEDI_NPD"); npdPath %>% list.files #CH path
 npdPath        <- ".." %>% file.path("../"); npdPath %>% list.files    #EEM path
-
-
-###### For data outputs ######
-#stats_outPath    <- damagePath %>% file.path("output_stats")
-
-### Temperature input file path
-inputPath        <- npdPath %>% file.path("data", "input_files")
 
 ### Current analysis folder path
 analysisPath     <- npdPath %>% file.path("analysis", "graphics_for_paper")
@@ -183,38 +176,6 @@ labor_sv <- read_excel(file.path(frediSVPath,"FrEDI_SV_Outputs_Labor.xlsx"), she
 ```
 
 
-### Total Sector Summary 
-
-(also Fig A2-1)
-
-Sectoral Annual Damages in Billions 2020$
-```{r table_allsectors_2090,echo=FALSE}
-
-#Baseline Results
-#used for main text #s and Table A2
-
-print(df_fstat %>%
-  filter(year ==2090) %>%
-    mutate(mean = mean/1e9 * pricelevel_2015_to_2020) %>% #in billions
-    mutate(X025 = X025/1e9 * pricelevel_2015_to_2020) %>%
-    mutate(X50 = X50/1e9 * pricelevel_2015_to_2020) %>%
-    mutate(X975 = X975/1e9 * pricelevel_2015_to_2020) %>%
-    select(sector,X025,X50,X975,mean,year) %>%
-    group_by(mean)%>%
-    arrange(.by_group = TRUE) %>% mutate(across(c('X025','X50', 'X975'), ~ signif(.,2))))
-  
-
-#total summary
-print (signif(df_fstat %>% 
-        filter(year == 2090) %>%
-        mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
-        mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
-        mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
-        mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
-        summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
-
-```
-
 # Tables
 
 ## Table 1
@@ -270,7 +231,38 @@ print(df_fstat_2090phys %>%
 created elsewhere: code/ssp_sensitivity_runs/
 
 
-## Appendix Table - A3-1
+## Appendix Table - A1
+
+Total Sectoral Summary
+Sectoral Annual Damages in Billions 2020$
+```{r table_allsectors_2090,echo=FALSE}
+
+#Baseline Results
+#used for main text #s and Table A1
+
+print(df_fstat %>%
+  filter(year ==2090) %>%
+    mutate(mean = mean/1e9 * pricelevel_2015_to_2020) %>% #in billions
+    mutate(X025 = X025/1e9 * pricelevel_2015_to_2020) %>%
+    mutate(X50 = X50/1e9 * pricelevel_2015_to_2020) %>%
+    mutate(X975 = X975/1e9 * pricelevel_2015_to_2020) %>%
+    select(sector,X025,X50,X975,mean,year) %>%
+    group_by(mean)%>%
+    arrange(.by_group = TRUE) %>% mutate(across(c('X025','X50', 'X975'), ~ signif(.,2))))
+  
+
+#total summary
+print (signif(df_fstat %>% 
+        filter(year == 2090) %>%
+        mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
+        mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
+        summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
+
+```
+
+## Appendix Table - A3
 Adaptation
 ``` {r adapt_table,eval=TRUE, include=FALSE,echo=FALSE}
 
@@ -284,6 +276,9 @@ df_adapt_sectors <- df_fstat_2090adapt %>%
            mutate(across(c('X025', 'X975', 'mean'), ~ signif(.,2))))
 
 ```
+
+## Appendix Table - A4
+calculated elsewhere
 
 
 # Figures
@@ -351,7 +346,7 @@ df_1 <- plots_stackedBar_bySector %>%
            #2050, 2070, and 2090, colored by sector category' )+
 
 df_1
-ggsave(plot = df_1, filename = 'fig02.tiff',width = 5,height = 4)
+ggsave(plot = df_1, filename = 'Figure2.tiff',width = 5,height = 4)
 
 print(df_1$data %>% filter(year == 2090) %>%
         #group_by_at("damageType") %>%
@@ -363,62 +358,7 @@ print(df_1$data %>% filter(year == 2090) %>%
         mutate(across(c('value'), ~ signif(.,2))))
 ```
 
-### Option B - with error bars
-```{r Fig02_B, eval = FALSE,echo=FALSE}
-##Baseline Case ##
 
- #same plot as option A, with error bars overlayed
- df_plotsum <- plots_stackedBar_bySector %>%
-   group_by_at(c("year")) %>%
-   summarize_at(.vars=c("mean","X025",'X975','X50'),sum,na.rm=T) %>%
-   mutate(ymin = X025 / 1e12 *pricelevel_2015_to_2020) %>%
-   mutate(ymax = X975 / 1e12 *pricelevel_2015_to_2020) %>%
-   ungroup
- 
-df_1 <- plots_stackedBar_bySector %>%
-       ggplot() +
-       geom_bar(aes(fill=category,y=value,x=year),
-                position="stack", 
-                stat="identity", 
-                alpha = 0.7) +
-       scale_y_continuous("Damages (Trillions)",limits=c(0,12.5)) +
-       scale_x_discrete("Year") +
-       theme_minimal() +
-       scale_fill_manual(values=colors_6)+
-       theme(axis.text = element_text(size=11), 
-             axis.title = element_text(size =14),
-             axis.title.y = element_text(margin = 
-                                        margin(t = 0, r = 10, b = 0, l = 0)),
-             axis.title.x = element_text(margin = 
-                                        margin(t = 5, r = 0, b = 0, l = 0)),
-             legend.text=element_text(size=10),
-             legend.title=element_text(size=10, face="bold"),
-             plot.title = element_text(size = 16, face = "bold"),
-             plot.title.position = "plot")+
-       labs(title="Annual U.S. Climate-Driven Damages",
-            subtitle="Mean Damages by Year and Cateogry (Trillions $)",
-            fill = "Sector Categories \n(number of sectors in category)")+#,
-            #caption = "Figure 2.")+
-       geom_errorbar(data = df_plotsum, 
-                     aes(x=year,ymin = ymin, ymax=ymax),
-                     color = 'dark gray',
-                     width = 0.25,
-                     size=1)
- df_1
- ggsave(plot = df_1, filename = 'fig02_uncertainty.tiff',width = 5,height = 4)
- 
- 
-#show in billions of 2020 USD
-print(plots_stackedBar_bySector %>%
-        filter(year==2090) %>%
-        mutate(X025 = X025 / 1e9 *pricelevel_2015_to_2020) %>%
-        mutate(X975 = X975 / 1e9 *pricelevel_2015_to_2020) %>%
-        mutate(value = value *1e3) %>%
-        group_by_at(c("category")) %>%
-        summarize_at(.vars = c("value",'X025','X975'),sum,na.rm=T) %>% 
-        mutate(across(c('value', 'X025','X975'), ~ signif(.,2))))
-         
-```
 ## Figure 3 Damages v GDP
 
 ```{r Figure3, fig.height=6, fig.width=9, echo=FALSE}
@@ -497,7 +437,7 @@ data %>%
          linetype = guide_legend(reverse=T))
 
 ## export 
-ggsave(filename = 'fig03.tiff', width = 9, height = 6, bg = 'white')
+ggsave(filename = 'Figure3.tiff', width = 9, height = 6, bg = 'white')
 
 df <- data %>% 
   filter(year %in% c(2090, 2100, 2300))
@@ -552,15 +492,6 @@ plots_basicBoxWhisker <- plots_basicBoxWhisker %>%
                           factor(levels = rev(cat_i$category))) %>%
         arrange_at(.vars=c("category"))
 
-
-# stats <- plots_basicBoxWhisker %>%
-#   group_by(sector) %>%
-#   mutate(X025=quantile(value,probs=0.025),
-#               X25=quantile(value,probs=0.25), 
-#               X50=quantile(value, probs=0.50),
-#               X75=quantile(value,probs=0.75),
-#               X975=quantile(value,probs=0.975),
-#               mean=mean(value)) %>% ungroup
 
 ```
 
@@ -722,7 +653,7 @@ units <- 'Billions'
   
   #Option B is commented out
     ggsave(plot = p, filename = 'Figure4a(2).tiff',width = 6.75,height = 1.65, bg = 'white')
-    ggsave(plot = p1, filename = 'Figur4b(2).tiff',width = 7,height = 2.5,bg = 'white')
+    ggsave(plot = p1, filename = 'Figure4b(2).tiff',width = 7,height = 2.5,bg = 'white')
     #ggsave(plot = p2, filename = 'Figure3lgnd.tiff',width = 6.8,height = 3.5)
     ggsave(plot = p2, filename = 'Figure4c(2).tiff',width = 7,height = 4.75,bg = 'white')
     
@@ -885,7 +816,7 @@ p <- ggplot(data = MergedStates,
                x='',
                y='')
   
-  ggsave(plot = p, filename = 'fig05_map.tiff',width = 9,height = 5)
+  ggsave(plot = p, filename = 'Figure5_map.tiff',width = 9,height = 5)
   p
   
   print(df_region_sum %>% 
@@ -1009,8 +940,6 @@ plist
 
 ```
 ## Figure 6. SV Results
-plot SV results - raw data created elsewhere
-graphics_for_paper/FrEDI_SV.Rmd
 
 ```{r Fig06,fig.height=8,fig.width=12,echo=FALSE}
 
@@ -1237,7 +1166,7 @@ plot_i
   
 plot_i
 
-ggsave(plot = plot_i, filename = 'fig06.tiff',width = 12,height = 8)
+ggsave(plot = plot_i, filename = 'Figure6.tiff',width = 12,height = 8)
 ```
 
 
@@ -1280,9 +1209,6 @@ plot.data$discount.rate <- factor(plot.data$discount.rate,
                                   levels=c("1.5% Ramsey", "2.0% Ramsey", 
                                            "2.5% Ramsey", "3.0% Ramsey"))
 
-## ordering of damage functions
-#plot.data$adaptation <- factor(plot.data$adaptation, 
-#                               levels=c('Default Adaptation'))
 
 ## all three just the boxplot
 ## function to help with boxplots
@@ -1359,28 +1285,24 @@ p <- plot.data %>%
 
 p
 
-ggsave(p, filename = 'fig07.tiff', width=7, height=3.5, bg = 'white')
+ggsave(p, filename = 'Figure7.tiff', width=7, height=3.5, bg = 'white')
 
 ```
 
-## Appendix Figure A1-1.
+## Appendix Figure A1.
 RFF temperature, population, and gdp - created elsewhere
 Process_RFF_Temp.Rmd
 
 
-## Appendix Figure A2-1.  
+## Appendix Figure A2.  
 
 Annual Damages Timeseries - all sectors (national total)
 
 Plot annual impacts by sector (National Totals)
-
 currently ordered by decreasing mean in 2090 - 
 
 ```{r annual_bySector,eval=TRUE,fig.height=12,fig.width=9,echo=FALSE}
  plots_annual_bySector <- df_fstat %>%
-   #if plotting 2100 version
-   #filter(year <= 2100) %>%
-   #if plotting 2300 version
    filter(year <= 2100 & year > 2020) %>%
    mutate_at(.vars = c('X025','X50', 'mean','X975'), 
              function(x){x / 1e9 *pricelevel_2015_to_2020}) %>% # billions 2020$
@@ -1502,13 +1424,13 @@ plot_i <- plot_i +
   
 plot_i
 
-ggsave(plot = plot_i, filename = 'fa2-1.tiff',width = 9,height = 12)
+ggsave(plot = plot_i, filename = 'FigureA2.tiff',width = 9,height = 12)
 
 ```
 
 
 
-## Appendix Figure A2-2.  
+## Appendix Figure A3.  
 
 ### Map - total annual damages map
 ```{r Map_annual_total_damages,fig.height=5,fig.width=9,echo=FALSE}
@@ -1652,7 +1574,7 @@ p <- ggplot(data = MergedStates,
          y='',
          fill= 'Damages (Billions)')
 
-  ggsave(plot = p, filename = 'fa2-2_map.tiff',width = 9,height = 5)
+  ggsave(plot = p, filename = 'FigureA3_map.tiff',width = 9,height = 5)
   p
   print(df_region_sum %>% 
           mutate(across(c('annual_impacts'), ~ signif(.,2))))
@@ -1694,80 +1616,6 @@ regions = unique(plots_pie_regionmarginal$region)
 plist <-list()
 count=0
 
-
-#category pie charts
-#for (iregion in regions){
-#  count = count+1
-#   p_temp <- plots_pie_regionmarginal %>%
-#    filter(region == iregion) %>%
-#    group_by_at(.vars=c("category","color_f")) %>% 
-#   summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
-#   ungroup %>% arrange_at(.vars=c("mean", "category","color_f"))
-#   #pie(p_temp$annual_impacts, labels='',col=p_temp$color_f)
-#   p <- ggplot(p_temp, aes(x = "", y = mean, 
-#                           fill = reorder(category,mean))) +
-#   geom_col(color = "black") +
-#   geom_text(aes(label = ''),
-#             position = position_stack(vjust = 0.5)) +
-#   coord_polar(theta = "y") +
-#   scale_fill_manual(values =(p_temp$color_f), 
-#                     guide = guide_legend(reverse=TRUE))+#,
-#                     #labels=function(x) sprintf("$%1.0f", as.double(x))) +
-#     theme_void()+
-#     labs(fill = "Categories",title = iregion)
-#   plist[[count]] <-p
-#   ggsave(p,filename = paste0('Figure9a_',iregion,'.tiff'),width = 5,height = 5)
-# }
-
-
-#sector pie charts
-# for (iregion in regions){
-#   count = count+1
-#   
-#   p_temp <- plots_pie_regionmarginal %>%
-#    filter(region == iregion) %>%
-#    group_by_at(.vars=c("sector","color_f")) %>% 
-#   summarize_at(.vars=c("mean"),sum,na.rm=T) %>%
-#   ungroup %>% arrange_at(.vars=c("mean")) %>%
-#   filter(mean >=0) %>%
-#     arrange(desc(mean))%>%
-#     mutate(RowNum = row_number(),
-#            sector = ifelse(RowNum <= 4, sector, 'Remaining')) %>%
-#     group_by(sector) %>%
-#     summarise(mean = sum(mean)) %>%
-#     arrange(desc(mean))%>%
-#     mutate(sector = as.factor(sector)) %>%
-#     mutate(color_f = case_when(
-#     sector %in% c('ATS Extreme Temperature') ~ paste0(colors_7[7],darkop),
-#     sector %in% c('Air Quality') ~ paste0(colors_7[6],darkop),
-#     sector %in% c('Labor') ~ paste0(colors_7[5],darkop),
-#     sector %in% c('CIL Agriculture') ~ paste0(colors_7[4],darkop),
-#     sector %in% c('Rail') ~ paste0(colors_7[3],darkop),
-#     sector %in% c('High Tide Flooding and Traffic') ~ paste0(colors_7[2],darkop),
-#     sector %in% c('Roads') ~ paste0(colors_7[1],darkop),
-#     sector %in% c('Wildfire') ~ paste0('#c05600',darkop),
-#     sector %in% c('Wind Damage') ~ paste0('#446443',darkop),
-#     sector %in% c('Southwest Dust') ~ paste0('#936f38',darkop),
-#     sector %in% c('Remaining') ~ paste0('#D3D3D3',darkop)))
-#   
-#   #p_temp$sector <- factor(p_temp$sector)
-#   
-#   #pie(p_temp$annual_impacts, labels='',col=p_temp$color_f)
-#   
-#   p <- ggplot(p_temp, aes(x = "", y = mean, fill = reorder(sector,mean))) +
-#   geom_col(color = "black") +
-#   geom_text(aes(label = ''),
-#             position = position_stack(vjust = 0.5)) +
-#   coord_polar(theta = "y") +
-#   scale_fill_manual(values =rev(p_temp$color_f), 
-#                     guide = guide_legend(reverse=TRUE))+#,
-#                     #labels=function(x) sprintf("$%1.0f", as.double(x))) +
-#     theme_void()+
-#     labs(fill = "Top 4 Sectors",title = iregion)
-#   plist[[count]] <-p
-# }
-
-#plist
 
 
 #donut plots
@@ -1835,14 +1683,15 @@ for (iregion in regions){
     
   #p
   plist[[count]] <-p
-  ggsave(p,filename = paste0('fa2-2_',iregion,'.tiff'),width = 5,height = 5)
+  ggsave(p,filename = paste0('FigureA3_',iregion,'.tiff'),width = 5,height = 5)
 
 }
 
 plist
 
 ```
-## Appendix Figure A4-1.  
+
+## Appendix Figure A4.  
 
 Annual Damages Timeseries - all sectors (national total)
 
@@ -1974,18 +1823,15 @@ plot_i <- plot_i +
   
 plot_i
 
-ggsave(plot = plot_i, filename = 'fa4-1.tiff',width = 9,height = 12)
+ggsave(plot = plot_i, filename = 'FigureA4.tiff',width = 9,height = 12)
 
 ```
 
-##Appendix Figure A4-2 
+##Appendix Figure A5 
 NPD - Discounting Method Box Plot
 
 ```{r FigureA4-2, fig.height=5, fig.width=7, echo=FALSE}
 
-## full streams
-#data <- scghg_data %>%
-#        mutate(adaptation = 'Default Adaptation')
 
 data <- npd_data
 
@@ -2021,10 +1867,6 @@ plot.data$discount.rate <- factor(plot.data$discount.rate,
                                   levels=c("1.5% Ramsey", "2.0% Ramsey", 
                                            "2.5% Ramsey", "3.0% Ramsey",
                                            "2.0% CDR","3.0% CDR"))
-
-## ordering of damage functions
-#plot.data$adaptation <- factor(plot.data$adaptation, 
-#                               levels=c('Default Adaptation'))
 
 ## all three just the boxplot
 ## function to help with boxplots
@@ -2102,5 +1944,5 @@ p <- plot.data %>%
 
 p
 
-ggsave(p, filename = 'fa4-2.tiff', width=7, height=3.5, bg = 'white')
+ggsave(p, filename = 'FigureA5.tiff', width=7, height=3.5, bg = 'white')
 ```

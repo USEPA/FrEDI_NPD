@@ -5,13 +5,14 @@
 ##          1.5%, 2%, 2.5%, and 3% Ramsey discounting and a 2% and 3% constant discount rate
 ##          by 2300 in 2020 USD (marginal = perturbed - baseline).
 ##          - FrEDI annual damages are converted from 2015$ to 2020$
+##          Processes results for CO2 pulse only (for CH4, N2O - see '3_compute...ch4_n2o.R')
 ## Inputs:  data/external/rffsp_usa.csv
 ##          data/external/rffsp_fair_sequence.csv
 ##          output/damages/rffsp/damages/damages_[scenario].parquet
 ## Outputs: output/npd/co2_full_streams_2020_national_default_adaptation.parquet
 ##          output/npd/npd_fredi_national.csv
 ## Written by: US EPA, National Center for Environmental Economics (OP) and Climate Change Division (OAP); December 2022
-## Last updated: 1.4.2023 by B. Parthum
+## Last updated: 4.19.2022 by E. McDuffie
 ## NOTES: 
 #####
 
@@ -206,8 +207,7 @@ for (GAS in c('co2')) {
                                                            T ~ 1/(1+rho)^(year-emissions.year)),
                    damages.marginal.discounted = damages.marginal * discount.factor,
                    npd                       = sum(damages.marginal.discounted, na.rm = F),
-                   damages.baseline.discounted = damages.baseline * discount.factor,
-                   npd                         = sum(damages.baseline.discounted, na.rm = F)) %>% 
+                   damages.baseline.discounted = damages.baseline * discount.factor) %>% 
             ungroup()
         )
     }
@@ -246,7 +246,7 @@ for (GAS in c('co2')) {
 }
 ## export summary stats
 means %>% 
-  write_csv(paste0('output/npd_damage_transformation/npd.csv'))
+  write_csv(paste0('output/npd_damage_transformation/mean_co2_npd.csv'))
 
 ### stop the clock
 time2 = Sys.time()

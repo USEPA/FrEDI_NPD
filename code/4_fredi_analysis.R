@@ -1,12 +1,11 @@
 #####
 ## Title:   5_fredi_analysis.R
 ## Purpose: This file will read all FrEDI output files and generate aggregate dataframes
-##          for use in the scc graphics script.
+##          for use in the Hartin et al., 2023 graphics script.
 ##          
 ## Inputs:  output/damages/rffsp/damages_[scenario].parquet
 ## Outputs: output/damages/rffsp/damages_[scenario].parquet
 ## Written by: US EPA, Climate Change Division (OAP); November 2022
-### Edited 2022.11.29
 ## Last updated: 11/29/2022 by E. McDuffie
 ## Notes:       
 ##
@@ -24,13 +23,8 @@ require(dplyr);
 
 
 ###### Set Paths ######
-#eem (b/c I don't haver permission to open SCC_FrEDI.Rproj)
-setwd("/home/emcduf01/shared/ncee/scghg/FrEDI/SCC_FrEDI/")
 inputsPath   <- "." %>% file.path("output", "damages","rffsp")
 outputsPath  <- "." %>% file.path("output", "damages","fredi_analysis")
-#original scghg
-#scghgPath    <- "." %>% file.path("output","scghg")
-##transformed scghg path (updated 1/5/23)
 scghgPath    <- "." %>% file.path("output","scghg_damage_transformation")
 
 ##### Collect Damage Files ####
@@ -104,7 +98,7 @@ if (reload ==1){
       ####################
       ### NOTE (1/5/23): this simplified version corrects damages from all sectors, even those that are not dependent on GDP
       ### In future versions, a different multiplier equation should be implemented to capture the actual dependence of each 
-      ###  individual sector on GDP and only correct those sectors that have an explict GD dependence. 
+      ###  individual sector on GDP and only correct those sectors that have an explicit GDP dependence. 
       ###################
       #1. Calculate initial total damages (group by year and trial), D0
       D0 <- data_i %>%

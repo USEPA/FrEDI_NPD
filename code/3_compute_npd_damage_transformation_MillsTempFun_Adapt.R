@@ -11,8 +11,8 @@
 ##          output/damages/rffsp/damages/damages_[scenario].parquet
 ## Outputs: output/npd/co2_full_streams_2020_national_default_adaptation.parquet
 ##          output/npd/npd_fredi_national.csv
-## Written by: US EPA, National Center for Environmental Economics (OP) and Climate Change Division (OAP); December 2022
-## Last updated: 4/4/2023
+## Written by: US EPA Climate Change Division (OAP); December 2022
+## Last updated: 4/4/2023 by E. McDuffie
 ## NOTES: 
 #####
 

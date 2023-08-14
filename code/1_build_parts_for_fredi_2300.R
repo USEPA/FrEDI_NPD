@@ -20,7 +20,7 @@
 ##          data/input_files/temp_baseline/temp_baseline_[scenario].csv
 ##          data/input_files/global_mean_surface_temperature_perturbed_co2_2020.csv
 ##          data/input_files/temp_perturbed/temp_perturbed_[scenario].csv
-## Written by: US EPA, National Center for Environmental Economics; January 2022
+## Written by: US EPA, National Center for Environmental Economics & Office of Atmospheric Protection; January 2022
 ## Last updated: 9/28/2022 by E. McDuffie
 #####
 
@@ -111,7 +111,6 @@ pop =
   mutate(pop = pop*1e3)
 
 ## fredi default scenarios population
-# fredi_scenario_pop = read_excel('data/external/20210923_ciraTempBinData.xlsx', sheet = 'defaultScenario', range = 'C3:K20')
 fredi_scenario_pop = 
   external_path %>%
   file.path('20220701_FrEDI_config.xlsx') %>%
