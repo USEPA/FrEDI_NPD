@@ -244,11 +244,11 @@ print(df_fstat %>%
   filter(year ==2090) %>%
     mutate(mean = mean/1e9 * pricelevel_2015_to_2020) %>% #in billions
     mutate(X025 = X025/1e9 * pricelevel_2015_to_2020) %>%
-    mutate(X50 = X50/1e9 * pricelevel_2015_to_2020) %>%
+    #mutate(X50 = X50/1e9 * pricelevel_2015_to_2020) %>%
     mutate(X975 = X975/1e9 * pricelevel_2015_to_2020) %>%
-    select(sector,X025,X50,X975,mean,year) %>%
-    group_by(mean)%>%
-    arrange(.by_group = TRUE) %>% mutate(across(c('X025','X50', 'X975'), ~ signif(.,2))))
+    select(sector,X025,X975,mean,year) %>%
+    #group_by(mean)%>%
+    arrange(.by_group = TRUE) %>% mutate(across(c('X025','mean','X975'), ~ signif(.,2))))
   
 
 #total summary
@@ -256,9 +256,9 @@ print (signif(df_fstat %>%
         filter(year == 2090) %>%
         mutate(mean = mean * pricelevel_2015_to_2020/1e12) %>%
         mutate(X025 = X025 * pricelevel_2015_to_2020/1e12) %>%
-        mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
+        #mutate(X50 = X50 * pricelevel_2015_to_2020/1e12) %>%
         mutate(X975 = X975 * pricelevel_2015_to_2020/1e12) %>%
-        summarize_at(.vars = c("mean","X025","X50","X975"),sum,na.rm=T), 2))
+        summarize_at(.vars = c("mean","X025","X975"),sum,na.rm=T), 2))
 
 ```
 
