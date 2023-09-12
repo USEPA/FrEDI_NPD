@@ -467,7 +467,7 @@ plots_basicBoxWhisker <- df_fraw_allnat %>%
     sector %in% infrastructure_cat ~ "Infrastructure (7)",
     sector %in% eco_cat ~ "Ecosystems+ Recreation (3)",
     TRUE ~ NA_character_)) %>% 
-    mutate(value = annual_impacts / 1e9 * pricelevel_2015_to_2020) %>% #billions
+    mutate(value = annual_impacts ) %>%# / 1e9 * pricelevel_2015_to_2020) %>% #billions
   filter(category != "NA") 
 
 #find order of sectors and categories, largest to smallest, then sort
@@ -498,8 +498,11 @@ plots_basicBoxWhisker <- plots_basicBoxWhisker %>%
 ```{r boxplot_vals_function, echo=FALSE, include=FALSE}
 #define function that calculates box plot values
 BoxMedianQuant <- function(x) {
-  v <- c(quantile(x, 0.025), quantile(x, 0.25), median(x), 
-         quantile(x, 0.75), quantile(x, 0.975))
+  v <- c(quantile(x, 0.025)/1e9 * (113.784/104.691), 
+         quantile(x, 0.25)/1e9 * (113.784/104.691), 
+         median(x)/1e9 * (113.784/104.691), 
+         quantile(x, 0.75)/1e9 * (113.784/104.691), 
+         quantile(x, 0.975)/1e9 * (113.784/104.691))
   names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
   v
 }
@@ -510,6 +513,12 @@ outliers <- function(x) {
   } else {
     return(NA)
   }
+}
+
+mean_bil <- function(x) {
+  v <- c(mean(x)/1e9 * (113.784/104.691))
+  names(v) <- c("mean")
+  v
 }
 ```
 
@@ -525,19 +534,19 @@ units <- 'Billions'
     ggplot(aes(x=reorder(sector,value,mean,na.rm=TRUE),
                y=value,
                fill=category))+
-    coord_flip()+
+    coord_flip(ylim = c(0,10250),clip = 'off')+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
                  width=0.7,
-                 alpha=0.6)+
+                 alpha=0.6)  +
     #stat_summary(fun.y = outliers, 
     #             geom = "point",
     #             color = 'dark gray',
     #             size=1)+
-    stat_summary(fun=mean,geom = "point",
+    stat_summary(fun.y = mean_bil,geom = "point",
                  shape=23,
-                 color='black')+
-    scale_y_continuous(sec.axis=dup_axis(),limits=c(0,10250),labels = scales::comma)+
+                 color='black') +
+    scale_y_continuous(sec.axis=dup_axis(),labels = scales::comma) +#,limits=c(0,10250),)#+
     scale_fill_manual(values=rev(colors_6))+ 
     scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='',
@@ -557,6 +566,8 @@ units <- 'Billions'
     knitr::opts_chunk$set(fig.width=6,fig.height = 5)
   plot_list[[1]] = p
   p
+  test <- ggplot_build(p)$data[[1]]
+  test2 <- ggplot_build(p)$y[[1]]
   
   p1 <- plots_basicBoxWhisker %>%
     #filter for next top sectors (selected by hand)
@@ -568,7 +579,7 @@ units <- 'Billions'
     ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
                y=value,
                fill=category))+
-    coord_flip()+
+    coord_flip(ylim = c(NA,1125),clip='off')+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
                  width=0.7,
@@ -577,10 +588,10 @@ units <- 'Billions'
     #             geom = "point",
     #             color = 'dark gray',
     #             size=1)+
-    stat_summary(fun=mean,geom = "point",
+    stat_summary(fun.y=mean_bil,geom = "point",
                  shape=23,
                  color='black')+
-    scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,1125))+
+    scale_y_continuous(sec.axis=dup_axis()) +#, limits = c(NA,1125))+
     scale_fill_manual(values=rev(colors_6))+
     scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='',
@@ -618,7 +629,7 @@ units <- 'Billions'
     ggplot(aes(x=reorder(sector,value,mean,na.rm=T),
                y=value,
                fill=category))+
-    coord_flip()+
+    coord_flip(ylim = c(NA,100),clip='off')+
     stat_summary(fun.data=BoxMedianQuant, 
                  geom="boxplot",
                  width = 0.7,
@@ -627,10 +638,10 @@ units <- 'Billions'
     #             geom = "point",
     #             color = 'dark gray',
     #             size=1)+
-    stat_summary(fun=mean,geom = "point",
+    stat_summary(fun.y=mean_bil,geom = "point",
                  shape=23,
                  color='black')+
-    scale_y_continuous(sec.axis=dup_axis(), limits = c(NA,100))+
+    scale_y_continuous(sec.axis=dup_axis()) +#, limits = c(NA,100))+
     scale_x_discrete(labels = function(x) str_wrap(x, width = 25))+
     labs(x='', 
          y=paste0('Damages (',units,')'),
@@ -651,8 +662,8 @@ units <- 'Billions'
   p2
   
   
-  #Option B is commented out
-    ggsave(plot = p, filename = 'Figure4a(2).tiff',width = 6.75,height = 1.65, bg = 'white')
+  #Option B is commented out #6.75, 1.65
+    ggsave(plot = p, filename = 'Figure4a(2).tiff',width = 6.65,height = 1.65, bg = 'white')
     ggsave(plot = p1, filename = 'Figure4b(2).tiff',width = 7,height = 2.5,bg = 'white')
     #ggsave(plot = p2, filename = 'Figure3lgnd.tiff',width = 6.8,height = 3.5)
     ggsave(plot = p2, filename = 'Figure4c(2).tiff',width = 7,height = 4.75,bg = 'white')
