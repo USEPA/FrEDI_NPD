@@ -1,8 +1,7 @@
 # FrEDI_NPD
 
 This repository includes the input data, analysis scripts, and output data and figures associated with<br>
-Hartin C. et al., (in discussion) <em>"Advancing the estimation of future climate impacts within the United States".</em>
-https://egusphere.copernicus.org/preprints/2023/egusphere-2023-114/
+<em>Hartin C., McDuffie, E. E., Noiva, K., Sarofim, M., Parthum, B., Martinich, J., Barr, S., Neumann, J., Willwerth, J., and Fawcett, A.: "Advancing the estimation of future climate impacts within the United States", Earth Syst. Dynam., 14, 1015-1037, [https://doi.org/10.5194/esd-14-1015-2023](https://doi.org/10.5194/esd-14-1015-2023), 2023.</em>
 
 <strong>Corresponding Author</strong>: Corinne Hartin (hartin.corinne@epa.gov)
 
